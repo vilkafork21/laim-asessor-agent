@@ -125,7 +125,7 @@ def validate_monitoring_metric(payload: object, *, require_computed: bool = True
         count = role_counts[role]
         if count < minimum or (maximum is not None and count > maximum):
             raise MonitoringContractError(f"Недопустимое число источников роли {role}: {count}")
-    missing_policy = _require(scoring, "missing_policy", _MISSING)
+    _require(scoring, "missing_policy", _MISSING)
     denominator = scoring.get("majority_denominator")
     if method == "majority" and denominator not in {"declared", "present"}:
         raise MonitoringContractError("majority требует denominator declared или present")
