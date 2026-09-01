@@ -1,0 +1,209 @@
+{
+  "id": "4ef9c8f7-b73b-46e8-b54d-fb47aee892e1",
+  "name": "LAIM Asessor Agent",
+  "description": "Агент Асессор для мониторинга агентов. Размечает ответы агентов для отслежиивания изменения качества",
+  "fullDescription": "",
+  "ui": {
+    "settings": [
+      {
+        "page": "General",
+        "title": "General",
+        "components": [
+          {
+            "type": "form",
+            "label": "Настройки Агента Асессора",
+            "config": {
+              "components": [
+                {
+                  "parameter": "scoring_rag_train_size",
+                  "label": "Размер train выборки для тестирования решения",
+                  "uiComponent": "input",
+                  "type": "float",
+                  "defaultValue": 0.8
+                },
+                {
+                  "parameter": "model_id",
+                  "label": "LLM-судья",
+                  "uiComponent": "select",
+                  "type": "string",
+                  "allowedValues": [
+                    {
+                      "GigaChat 3 Ultra — стандартный маршрут": "giga"
+                    },
+                    {
+                      "MiniMax M2.5 — AI Gateway": "minimax-m2.5"
+                    },
+                    {
+                      "Qwen3 Coder Next — AI Gateway": "qwen3-coder-next"
+                    }
+                  ],
+                  "defaultValue": "giga"
+                },
+                {
+                  "parameter": "llm_model",
+                  "label": "Точная модель GigaChat (только для варианта GigaChat)",
+                  "uiComponent": "input",
+                  "type": "string",
+                  "defaultValue": "GigaChat-3-Ultra"
+                },
+                {
+                  "parameter": "num_assessors",
+                  "label": "Количество агентов-асессоров для разметки данных",
+                  "uiComponent": "input",
+                  "type": "integer",
+                  "defaultValue": 1
+                },
+                {
+                  "parameter": "instruction_llm_preprocessing",
+                  "label": "LLM-переформатирование и суммаризация инструкции (по умолчанию оригинал дословно)",
+                  "uiComponent": "checkbox",
+                  "type": "boolean",
+                  "defaultValue": false
+                },
+                {
+                  "parameter": "stage",
+                  "label": "Stage",
+                  "uiComponent": "select",
+                  "type": "string",
+                  "defaultValue": "combined",
+                  "options": [
+                    {
+                      "label": "combined",
+                      "value": "combined"
+                    },
+                    {
+                      "label": "scoring",
+                      "value": "scoring"
+                    },
+                    {
+                      "label": "monitoring",
+                      "value": "monitoring"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ],
+    "result": {
+      "title": "Results",
+      "components": []
+    }
+  },
+  "ports": [
+    {
+      "name": "reference_umr",
+      "label": "Reference UMR",
+      "in": true,
+      "type": "dataframe",
+      "shape": "shape_dataframe",
+      "description": "Эталонный плоский laim-umr.v2 для RAG",
+      "required": true,
+      "order": 1
+    },
+    {
+      "name": "monitoring_metric",
+      "label": "Monitoring metric",
+      "in": true,
+      "type": "default",
+      "shape": "shape_model",
+      "description": "Валидированный контракт laim-monitoring-metric.v2",
+      "required": true,
+      "order": 2
+    },
+    {
+      "name": "monitoring_umr",
+      "label": "Monitoring UMR",
+      "in": true,
+      "type": "dataframe",
+      "shape": "shape_dataframe",
+      "description": "Выход TDC: packed dialogue (array/JSON/literal) или legacy flat с session_id нормализуется внутри Assessor",
+      "required": true,
+      "order": 3
+    },
+    {
+      "name": "assessor_instruction",
+      "label": "Assessor instruction",
+      "in": true,
+      "type": "default",
+      "shape": "shape_model",
+      "description": "Инструкция разметки (DOCX или UTF-8 TXT); обязательна: судья размечает по ней",
+      "required": true,
+      "order": 4,
+      "getPortAsLocalPath": true
+    },
+    {
+      "name": "domain_rag_files_zip",
+      "label": "domain_rag_files_zip",
+      "in": true,
+      "type": "default",
+      "shape": "shape_model",
+      "description": "Файлы в формате .docx или машино-читаемые .pdf для заполнения доменной базы знаний.",
+      "required": false,
+      "order": 5,
+      "getPortAsLocalPath": true
+    },
+    {
+      "name": "scored_data",
+      "label": "scored_data",
+      "in": false,
+      "type": "dataframe",
+      "shape": "shape_dataframe",
+      "description": "UMR с main_metric судьи; для dialogue одна итоговая оценка сессии повторяется в её turn-строках",
+      "order": 6
+    },
+    {
+      "name": "acc_auto",
+      "label": "agent_accuracy",
+      "in": false,
+      "type": "default",
+      "shape": "shape_model",
+      "description": "Точность судьи на holdout эталона: для dialogue доля совпадений итогового session-level main_metric",
+      "order": 7
+    },
+    {
+      "name": "assessment_result",
+      "label": "assessment_result",
+      "in": false,
+      "type": "default",
+      "shape": "shape_model",
+      "description": "Машиночитаемый статус и покрытие расчёта оценок",
+      "order": 8
+    }
+  ],
+  "script": {
+    "type": "python",
+    "baseImageKey": "py312-simple",
+    "deployType": "docker",
+    "runConfiguration": {
+      "sourceFiles": [
+        "main.py",
+        "utils.py",
+        "agent/__init__.py",
+        "agent/asessor_agent.py",
+        "agent/config.py",
+        "agent/prompts.py",
+        "agent/pydantic_output.py",
+        "agent/score_results.py",
+        "agent/sds_chat_model.py",
+        "retriever/__init__.py",
+        "retriever/doc_loaders.py",
+        "retriever/retriever.py",
+        "laim_monitoring/__init__.py",
+        "laim_monitoring/core.py"
+      ],
+      "libraryDependencies": [
+        "requirements.txt"
+      ],
+      "functionName": "main",
+      "functionParameters": [],
+      "output": {
+        "type": "json",
+        "output": []
+      }
+    }
+  },
+  "shape": "other"
+}
