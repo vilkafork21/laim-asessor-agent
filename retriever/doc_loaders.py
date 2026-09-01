@@ -72,11 +72,6 @@ def load_documents_from_directory(
     directory_path: str, chunk_size: int = 1000, chunk_overlap: int = 200
 ) -> List[Document]:
     """Загружает все документы из директории и разбивает на чанки."""
-    try:  # langchain>=1.0 вынес сплиттеры в отдельный пакет
-        from langchain_text_splitters import RecursiveCharacterTextSplitter
-    except ImportError:
-        pass
-
     documents: List[Document] = []
     directory = Path(directory_path)
 
