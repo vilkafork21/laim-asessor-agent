@@ -75,7 +75,7 @@ def load_documents_from_directory(
     try:  # langchain>=1.0 вынес сплиттеры в отдельный пакет
         from langchain_text_splitters import RecursiveCharacterTextSplitter
     except ImportError:
-        from langchain.text_splitter import RecursiveCharacterTextSplitter
+        pass
 
     documents: List[Document] = []
     directory = Path(directory_path)
