@@ -1,3 +1,0 @@
-В этом модуле для пилота заменяется ТОЛЬКО main.py (parquet-байты + drop history).
-Остальные файлы — для справки (как асессор размечает: scoring+monitoring стадии, scoring_rag_train_size=0.8, asessor.run на ПОЛНОМ monitoring_dataset).
-НЕ менять остальной модуль без необходимости.

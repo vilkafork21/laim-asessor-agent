@@ -324,6 +324,38 @@ def _build_assessor(
     )
 
 
+def _split_units(
+    rag_units: pd.DataFrame, source_ids: list[str], train_fraction: float
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Делит эталон на train/holdout, сохраняя долю каждого класса оценок.
+
+    Дефекты в корзинах редки (5-12%): при случайном делении holdout остаётся
+    почти без них, и каппа считается по единицам счёта.
+    """
+    groups = rag_units["_group_id"] if "_group_id" in rag_units else None
+    grouped = groups is not None and groups.notna().any()
+    if grouped:
+        keys = rag_units.groupby("_group_id", sort=False)[source_ids[0]].min()
+        if len(keys) < 2:
+            raise MonitoringContractError("Для calibration требуется минимум две группы")
+    else:
+        keys = rag_units[source_ids[0]]
+
+    train_keys: list = []
+    for _label, members in keys.groupby(keys.to_numpy(), sort=True):
+        shuffled = members.sample(frac=1, random_state=42384)
+        split = min(max(int(len(shuffled) * train_fraction), 1), max(len(shuffled) - 1, 1))
+        train_keys.extend(shuffled.index[:split].tolist())
+
+    selected = set(train_keys)
+    mask = rag_units["_group_id"].isin(selected) if grouped else rag_units.index.isin(selected)
+    train = rag_units[mask].reset_index(drop=True)
+    test = rag_units[~mask].reset_index(drop=True)
+    if train.empty or test.empty:
+        raise MonitoringContractError("Для calibration не удалось разделить эталон")
+    return train, test
+
+
 def _calibrate(
     rag_units: pd.DataFrame,
     source_ids: list[str],
@@ -336,20 +368,7 @@ def _calibrate(
 ) -> tuple[dict[str, float], pd.DataFrame, pd.DataFrame]:
     if len(rag_units) < 2:
         raise MonitoringContractError("Для calibration требуется минимум две единицы")
-    groups = rag_units["_group_id"] if "_group_id" in rag_units else None
-    if groups is not None and groups.notna().any():
-        group_ids = list(dict.fromkeys(groups.dropna().tolist()))
-        if len(group_ids) < 2:
-            raise MonitoringContractError("Для calibration требуется минимум две группы")
-        shuffled_groups = pd.Series(group_ids).sample(frac=1, random_state=42384).tolist()
-        split = min(max(int(len(shuffled_groups) * train_fraction), 1), len(shuffled_groups) - 1)
-        train_groups = set(shuffled_groups[:split])
-        train = rag_units[rag_units["_group_id"].isin(train_groups)].reset_index(drop=True)
-        test = rag_units[~rag_units["_group_id"].isin(train_groups)].reset_index(drop=True)
-    else:
-        shuffled = rag_units.sample(frac=1, random_state=42384).reset_index(drop=True)
-        split = min(max(int(len(shuffled) * train_fraction), 1), len(shuffled) - 1)
-        train, test = shuffled.iloc[:split], shuffled.iloc[split:]
+    train, test = _split_units(rag_units, source_ids, train_fraction)
     predictions = _predict(
         _build_assessor(
             models,
@@ -386,19 +405,33 @@ def _calibrate(
         axis=1,
     )
     score = ResultsScorer(AnswersProcessor()).score(comparison, source_ids)
+    labels_used = labels[answered].astype(float)
     metrics = {
         "acc_auto": float(score["mean_accuracy"]["Mean accuracy"]),
+        "holdout_units": int(len(labels_used)),
+        "holdout_defect_units": int(
+            (labels_used[source_ids[0]] == labels_used[source_ids[0]].min()).sum()
+        ),
         "baseline_mode_accuracy": float(score["mean_accuracy"]["Mean mode"]),
         "cohen_kappa": score["cohen_kappa"],
         "krippendorff_alpha": score["krippendorff_alpha"],
         "spearman_correlation": float(score["mean_correlation"]),
+        "defect_recall": float(score["defect_recall"]),
+        "defect_precision": float(score["defect_precision"]),
     }
+    if metrics["holdout_defect_units"] < 10:
+        print(
+            f"calibration: в holdout {metrics['holdout_defect_units']} единиц с минимальной "
+            "оценкой — каппа и альфа на таком объёме неустойчивы"
+        )
     print(
         f"calibration: acc_auto={metrics['acc_auto']:.3f}, "
         f"baseline по моде={metrics['baseline_mode_accuracy']:.3f}, "
         f"каппа Коэна={metrics['cohen_kappa']:.3f}, "
         f"альфа Криппендорфа={metrics['krippendorff_alpha']:.3f}, "
-        f"корреляция Спирмана={metrics['spearman_correlation']:.3f}"
+        f"корреляция Спирмана={metrics['spearman_correlation']:.3f}, "
+        f"полнота на дефектах={metrics['defect_recall']:.3f}, "
+        f"точность на дефектах={metrics['defect_precision']:.3f}"
     )
     return metrics, test, predictions
 

@@ -196,6 +196,34 @@ class ResultsScorer:
             "krippendorff_alpha": float(np.mean(alphas)) if alphas else 0.0,
         }
 
+    def compute_defect_quality(
+        self, full_dataset: pd.DataFrame, answer_columns: list[str]
+    ) -> dict[str, float]:
+        """Полнота и точность судьи на дефектах — то, ради чего работает мониторинг.
+
+        Сдвиг судьи в сторону «всё хорошо» поднимает accuracy на перекошенной
+        разметке, поэтому деградация обязана быть видна отдельной метрикой.
+        """
+        caught = flagged = defects = 0
+        for answer_column in answer_columns:
+            agent_col = f"agent_{answer_column}"
+            if agent_col not in full_dataset.columns or answer_column not in full_dataset.columns:
+                continue
+            mask = full_dataset[[agent_col, answer_column]].notna().all(axis=1)
+            human = pd.to_numeric(full_dataset.loc[mask, answer_column], errors="coerce")
+            agent = pd.to_numeric(full_dataset.loc[mask, agent_col], errors="coerce")
+            if human.isna().all() or agent.isna().all():
+                continue
+            floor = human.min()
+            defects += int((human == floor).sum())
+            flagged += int((agent == floor).sum())
+            caught += int(((human == floor) & (agent == floor)).sum())
+
+        return {
+            "defect_recall": caught / defects if defects else 0.0,
+            "defect_precision": caught / flagged if flagged else 0.0,
+        }
+
     def score(
         self,
         full_dataset: pd.DataFrame,
@@ -205,10 +233,13 @@ class ResultsScorer:
         mean_correlation = self.compute_correlation(full_dataset, answer_columns)
         mean_accuracy_dict = self.compute_mean_accuracy(full_dataset, answer_columns)
         agreement = self.compute_agreement(full_dataset, answer_columns)
+        defects = self.compute_defect_quality(full_dataset, answer_columns)
 
         return {
             "mean_correlation": mean_correlation,
             "mean_accuracy": mean_accuracy_dict,
             "cohen_kappa": agreement["cohen_kappa"],
             "krippendorff_alpha": agreement["krippendorff_alpha"],
+            "defect_recall": defects["defect_recall"],
+            "defect_precision": defects["defect_precision"],
         }

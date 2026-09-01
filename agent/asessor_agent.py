@@ -20,6 +20,7 @@ from agent.prompts import (
     EXAMPLES_SUMMARYZATION_PROMPT,
     INSTRUCTION_PROMPT,
     INSTRUCTION_SUMMARYZATION_PROMPT,
+    REVIEW_PROMPT,
     SYSTEM_PROMPT,
 )
 from langchain_core.output_parsers.json import JsonOutputParser
@@ -51,6 +52,72 @@ EXAMPLES_SIZE: int = 15
 
 # Maximum length for text truncation
 TRUNCATION_LENGTH: int = 150
+
+# Дефектов в корзинах 5-12%, и в top-k похожих примеров попадает в лучшем случае
+# один: судья не видит, как выглядит нарушение, и перестаёт его распознавать.
+DEFECT_EXAMPLES_QUOTA: int = 3
+
+
+def _lowest_allowed_values(values_set: dict[str, set]) -> dict[str, float]:
+    """Минимум шкалы по каждому критерию; нечисловые шкалы пропускаются."""
+    lowest: dict[str, float] = {}
+    for column, values in values_set.items():
+        try:
+            numeric = [float(value) for value in values]
+        except (TypeError, ValueError):
+            continue
+        if numeric:
+            lowest[column] = min(numeric)
+    return lowest
+
+
+def _needs_review(answer: dict[str, object], lowest: dict[str, float]) -> bool:
+    """Оценка на нижней границе шкалы — кандидат на перепроверку."""
+    for column, floor in lowest.items():
+        if column not in answer:
+            continue
+        try:
+            if float(answer[column]) == floor:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def _is_defect_example(example: dict, lowest: dict[str, float]) -> bool:
+    """Пример с оценкой на нижней границе шкалы — образец нарушения."""
+    try:
+        answer = json.loads(example["answer"])
+    except (TypeError, ValueError, KeyError):
+        return False
+    return isinstance(answer, dict) and _needs_review(answer, lowest)
+
+
+def _defect_pool(
+    retriever, examples: list[dict], query: str, quota: int = DEFECT_EXAMPLES_QUOTA
+) -> list[dict]:
+    """Похожие на запрос примеры нарушений; без индекса — список как есть."""
+    if retriever is None:
+        return examples
+    return retriever.hybrid_search(query, k=quota)
+
+
+def _ensure_defect_examples(
+    found: list[dict],
+    pool: list[dict],
+    lowest: dict[str, float],
+    quota: int = DEFECT_EXAMPLES_QUOTA,
+) -> list[dict]:
+    """Дополняет найденные примеры образцами с минимальной оценкой."""
+    if not pool or not lowest:
+        return found
+
+    missing = quota - sum(1 for example in found if _is_defect_example(example, lowest))
+    if missing <= 0:
+        return found
+    seen = {example["question"] for example in found}
+    extra = [example for example in pool if example["question"] not in seen][:missing]
+    return found + extra
 
 
 def _serialize_llm_record(record: dict[str, object]) -> str:
@@ -171,6 +238,18 @@ class Asessor:
 
         # Используем Pydantic structured output вместо JsonOutputParser
         self.agent_chain = self.printing_chain | self.llm.with_structured_output(
+            self._output_model
+        )
+        # Второй проход: сниженные оценки перепроверяет «адвокат» с чистым контекстом —
+        # без него судья штрафует за то, чего инструкция не запрещает.
+        self.review_printing_chain = RunnableLambda(
+            lambda user_input: {
+                "instructions": self.instruction,
+                "answer_columns_values_set": self.answer_columns_values_set,
+                "user_input": user_input,
+            }
+        ) | ChatPromptTemplate.from_messages([REVIEW_PROMPT])
+        self.review_chain = self.review_printing_chain | self.llm.with_structured_output(
             self._output_model
         )
         self.logger.debug("Asessor Agent chain: SUCCESS")
@@ -338,6 +417,23 @@ class Asessor:
                 for ex in self.retrieval_examples
             ],
         )
+        self._lowest_values = _lowest_allowed_values(self.answer_columns_values_set)
+        self.defect_examples = [
+            example
+            for example in self.retrieval_examples
+            if _is_defect_example(example, self._lowest_values)
+        ]
+        self.logger.info(f"Примеров с минимальной оценкой в базе: {len(self.defect_examples)}")
+        # Отдельный индекс по нарушениям: иначе в few-shot попадают случайные
+        # дефекты, не связанные с оцениваемым запросом.
+        self.defect_retriever = (
+            QuestionAnswerRetriever(
+                embedding_model=self.embedding_model,
+                examples=self.defect_examples,
+            )
+            if self.defect_examples
+            else None
+        )
 
     def update_rag(self, new_dataset: pd.DataFrame):
         self.dataset = new_dataset
@@ -370,7 +466,13 @@ class Asessor:
             lambda user_input: {
                 "examples": [
                     "\n\nКонтекст оценки: " + val["question"] + "\nОценки: " + val["answer"]
-                    for val in self.examples_retriever.hybrid_search(query=user_input)
+                    for val in _ensure_defect_examples(
+                        self.examples_retriever.hybrid_search(query=user_input),
+                        _defect_pool(
+                            self.defect_retriever, self.defect_examples, user_input
+                        ),
+                        self._lowest_values,
+                    )
                 ],
                 "domain_knowledge": "\n".join(
                     [
@@ -414,4 +516,33 @@ class Asessor:
             delay_seconds=delay_seconds,
         )
 
+        return await self._review_lowest(batch_inputs, results, delay_seconds)
+
+    async def _review_lowest(
+        self, batch_inputs: list[str], results: list, delay_seconds: int
+    ) -> list:
+        """Перепроверяет оценки на нижней границе шкалы вторым проходом."""
+        lowest = _lowest_allowed_values(self.answer_columns_values_set)
+        if not lowest:
+            return results
+        positions = [
+            index
+            for index, value in enumerate(results)
+            if value is not None
+            and _needs_review(
+                value.model_dump() if hasattr(value, "model_dump") else value, lowest
+            )
+        ]
+        if not positions:
+            return results
+        self.logger.info(f"Перепроверка сниженных оценок: {len(positions)} из {len(results)}")
+        reviewed = await process_with_rate_limit(
+            self.review_printing_chain,
+            self.review_chain,
+            [batch_inputs[index] for index in positions],
+            delay_seconds=delay_seconds,
+        )
+        for index, verdict in zip(positions, reviewed):
+            if verdict is not None:
+                results[index] = verdict
         return results

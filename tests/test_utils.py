@@ -5,7 +5,7 @@
 import pandas as pd
 import pytest
 
-from utils import get_mode_safe, _to_hashable, _get_assessor_columns
+from utils import get_mode_safe, read_docx, _to_hashable, _get_assessor_columns
 
 
 class TestToHashable:
@@ -57,6 +57,24 @@ class TestGetModeSafe:
         assert get_mode_safe(["a", "b", "a", "c"]) == "a"
 
 
+def test_read_utf8_txt_instruction(tmp_path):
+    instruction = tmp_path / "instruction.txt"
+    instruction.write_text("Оцените диалог целиком.", encoding="utf-8")
+
+    assert read_docx(str(instruction)) == "Оцените диалог целиком."
+
+
+def test_read_docx_instruction_without_extension(tmp_path):
+    from docx import Document
+
+    instruction = tmp_path / "unstructured_data"
+    document = Document()
+    document.add_paragraph("Оцените диалог целиком.")
+    document.save(instruction)
+
+    assert read_docx(str(instruction)) == "Оцените диалог целиком."
+
+
 class TestGetAssessorColumns:
     """Тесты для функции _get_assessor_columns."""
 
@@ -93,3 +111,37 @@ class TestGetAssessorColumns:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+class TestAssessorColumnsExactMatch:
+    """source_1 не должен захватывать колонки source_10 (подстрочный матч)."""
+
+    def test_source_prefix_does_not_capture_longer_ids(self):
+        df = pd.DataFrame({
+            "agent_0_source_1": [1],
+            "agent_1_source_1": [1],
+            "agent_0_source_10": [0],
+        })
+        assert _get_assessor_columns(df, "source_1") == [
+            "agent_0_source_1", "agent_1_source_1",
+        ]
+
+    def test_plain_agent_column_still_matches(self):
+        df = pd.DataFrame({"agent_score": [1], "agent_score_extra": [0]})
+        assert _get_assessor_columns(df, "score") == ["agent_score"]
+
+
+def test_lowest_allowed_values_only_for_numeric_scales():
+    """Перепроверять «низкую» оценку осмысленно лишь на числовой шкале."""
+    from agent.asessor_agent import _lowest_allowed_values
+
+    assert _lowest_allowed_values({"score": {0.0, 1.0}}) == {"score": 0.0}
+    assert _lowest_allowed_values({"route": {"rag", "deposelector"}}) == {}
+
+
+def test_answer_needs_review_when_any_criterion_is_lowest():
+    from agent.asessor_agent import _needs_review
+
+    lowest = {"score": 0.0}
+    assert _needs_review({"score": 0.0}, lowest) is True
+    assert _needs_review({"score": 1.0}, lowest) is False
+    assert _needs_review({}, lowest) is False
