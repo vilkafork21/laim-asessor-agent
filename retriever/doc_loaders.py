@@ -81,8 +81,10 @@ def load_documents_from_directory(
     # Collect all files
     all_files = []
     for ext in SUPPORTED_EXTENSIONS.keys():
-        all_files.extend(directory.glob(f"*{ext}"))
-        all_files.extend(directory.glob(f"*{ext.upper()}"))
+        # Рекурсивно: архив домена обычно приходит с папками, и проверка
+        # наличия документов в main тоже идёт по rglob.
+        all_files.extend(directory.rglob(f"*{ext}"))
+        all_files.extend(directory.rglob(f"*{ext.upper()}"))
 
     logger.info(f"Найдено {len(all_files)} файлов в директории {directory_path}")
 
