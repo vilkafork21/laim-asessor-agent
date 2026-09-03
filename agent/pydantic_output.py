@@ -160,9 +160,17 @@ def _scale_field_type(literal_values: tuple[Any, ...]) -> Any:
     if len(set(labels)) != len(labels):
         raise ValueError(f"Строковые метки шкалы неоднозначны: {sorted(labels)}")
     originals = dict(zip(labels, literal_values, strict=True))
+
+    def normalize_label(value: Any) -> str:
+        if type(value) in (int, float):
+            for label, original in originals.items():
+                if type(original) in (int, float) and value == original:
+                    return label
+        return value if isinstance(value, str) else str(value)
+
     return Annotated[
         Literal[labels],
-        BeforeValidator(lambda value: value if isinstance(value, str) else str(value)),
+        BeforeValidator(normalize_label),
         AfterValidator(originals.__getitem__),
     ]
 

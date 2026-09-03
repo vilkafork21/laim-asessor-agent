@@ -174,6 +174,17 @@ class TestGigachatSchemaCompatibility:
             "is_correct": True,
         }
 
+    def test_float_scale_accepts_equivalent_integer_only(self):
+        df = pd.DataFrame({"assessment_score": [1.0, 0.0]})
+        model = create_simple_output_model(["assessment_score"], df)
+
+        assert model(assessment_score=1).assessment_score == 1.0
+
+        with pytest.raises(ValueError):
+            model(assessment_score=2)
+        with pytest.raises(ValueError):
+            model(assessment_score=True)
+
 
 class TestValidateOutput:
     """Тесты для функции validate_output."""
