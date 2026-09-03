@@ -238,7 +238,6 @@ class _QuotaGate:
 
 
 async def process_with_rate_limit(
-    printing_chain,
     main_chain,
     batch_inputs: List[dict],
     delay_seconds: float = DEFAULT_DELAY_SECONDS,
@@ -292,7 +291,6 @@ async def process_with_rate_limit(
             quota_attempts = 0
             other_attempts = 0
             while True:
-                await gate.wait()
                 async with semaphore:
                     try:
                         if not started:
@@ -301,7 +299,7 @@ async def process_with_rate_limit(
                                 started_bar.n = started_count
                                 started_bar.refresh()
                             started = True
-                            await printing_chain.ainvoke(inp)
+                        await gate.wait()
                         results[i] = await main_chain.ainvoke(inp)
                     except Exception as error:
                         last_error = error

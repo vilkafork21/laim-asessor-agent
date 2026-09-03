@@ -510,7 +510,6 @@ class Asessor:
         self.logger.debug(batch_inputs)
 
         results = await process_with_rate_limit(
-            self.printing_chain,
             self.agent_chain,
             batch_inputs,
             delay_seconds=delay_seconds,
@@ -537,7 +536,6 @@ class Asessor:
             return results
         self.logger.info(f"Перепроверка сниженных оценок: {len(positions)} из {len(results)}")
         reviewed = await process_with_rate_limit(
-            self.review_printing_chain,
             self.review_chain,
             [batch_inputs[index] for index in positions],
             delay_seconds=delay_seconds,

@@ -2,9 +2,13 @@
 Тесты для утилит в utils.py.
 """
 
+import asyncio
+import time
+
 import pandas as pd
 import pytest
 
+import utils
 from utils import get_mode_safe, read_docx, _to_hashable, _get_assessor_columns
 
 
@@ -145,3 +149,56 @@ def test_answer_needs_review_when_any_criterion_is_lowest():
     assert _needs_review({"score": 0.0}, lowest) is True
     assert _needs_review({"score": 1.0}, lowest) is False
     assert _needs_review({}, lowest) is False
+
+
+def test_process_with_rate_limit_retrieves_once_and_passes_prompt_to_judge():
+    class RetrievalJudgeChain:
+        def __init__(self):
+            self.retrieval_inputs = []
+            self.judge_inputs = []
+
+        async def ainvoke(self, value):
+            self.retrieval_inputs.append(value)
+            prompt = {"user_input": value}
+            self.judge_inputs.append(prompt)
+            return {"score": 1}
+
+    chain = RetrievalJudgeChain()
+
+    result = asyncio.run(
+        utils.process_with_rate_limit(chain, [{"trace_id": "one"}], delay_seconds=0)
+    )
+
+    assert result == [{"score": 1}]
+    assert chain.retrieval_inputs == [{"trace_id": "one"}]
+    assert chain.judge_inputs == [{"user_input": {"trace_id": "one"}}]
+
+
+def test_queued_request_waits_for_quota_cooldown(monkeypatch):
+    class QuotaChain:
+        def __init__(self):
+            self.first_attempt_failed_at = None
+            self.queued_started_at = None
+
+        async def ainvoke(self, value):
+            if value == "first" and self.first_attempt_failed_at is None:
+                await asyncio.sleep(0)
+                self.first_attempt_failed_at = time.monotonic()
+                raise RuntimeError("429 retry-after 0.1")
+            if value == "queued":
+                self.queued_started_at = time.monotonic()
+            return value
+
+    monkeypatch.setattr(utils, "MAX_INFLIGHT_REQUESTS", 1)
+    chain = QuotaChain()
+
+    result = asyncio.run(
+        utils.process_with_rate_limit(
+            chain,
+            ["first", "queued"],
+            delay_seconds=0,
+        )
+    )
+
+    assert result == ["first", "queued"]
+    assert chain.queued_started_at - chain.first_attempt_failed_at >= 0.08
