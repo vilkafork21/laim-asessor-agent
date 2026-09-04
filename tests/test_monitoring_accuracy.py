@@ -201,19 +201,19 @@ def test_monitoring_accuracy_does_not_require_gt(monkeypatch) -> None:
     assert scored_data["agent_response"].tolist() == ["answer-1", "answer-2"]
 
 
-def test_calibrate_prints_agreement_metrics(monkeypatch, capsys) -> None:
-    """Калибровка печатает каппу, альфу и Спирмана, а не только accuracy."""
-    rag_units = pd.DataFrame({"assessment_score": [1.0, 0.0, 1.0, 0.0]})
+_ADMISSION = dict(
+    min_holdout_units=2,
+    min_holdout_defect_units=1,
+    min_defect_recall=0.5,
+    min_kappa=0.2,
+    max_invalid_share=0.2,
+)
 
-    def fake_predict(_judge, test, source_ids, _count):
-        return pd.DataFrame(
-            {"agent_assessment_score": test["assessment_score"].tolist()}
-        )
 
+def _calibrate(monkeypatch, rag_units, fake_predict, **overrides):
     monkeypatch.setattr(assessor, "_build_assessor", lambda *_args: object())
     monkeypatch.setattr(assessor, "_predict", fake_predict)
-
-    metrics, _test, _predictions = assessor._calibrate(
+    return assessor._calibrate(
         rag_units,
         ["assessment_score"],
         "инструкция",
@@ -222,7 +222,24 @@ def test_calibrate_prints_agreement_metrics(monkeypatch, capsys) -> None:
         0.5,
         1,
         False,
+        assessment_contract=assessor._assessment_contract(_metric()),
+        admission_settings={**_ADMISSION, **overrides},
     )
+
+
+def test_calibrate_logs_agreement_metrics(monkeypatch, caplog) -> None:
+    """Калибровка публикует каппу, альфу, Спирмана и допуск, а не только accuracy."""
+    import logging
+
+    rag_units = pd.DataFrame({"assessment_score": [1.0, 0.0, 1.0, 0.0]})
+
+    def fake_predict(_judge, test, source_ids, _count):
+        return pd.DataFrame(
+            {"agent_assessment_score": test["assessment_score"].tolist()}
+        )
+
+    with caplog.at_level(logging.INFO):
+        metrics, _test, _predictions = _calibrate(monkeypatch, rag_units, fake_predict)
 
     assert metrics["acc_auto"] == 1.0
     assert metrics["cohen_kappa"] == 1.0
@@ -231,10 +248,90 @@ def test_calibrate_prints_agreement_metrics(monkeypatch, capsys) -> None:
     # на скольких единицах она посчитана.
     assert metrics["holdout_units"] == 2
     assert metrics["holdout_defect_units"] == 1
-    output = capsys.readouterr().out
-    assert "каппа Коэна" in output
-    assert "альфа Криппендорфа" in output
-    assert "Спирмана" in output
+    assert metrics["invalid_share"] == 0.0
+    assert metrics["admission_status"] == "green"
+    assert metrics["bias_mean"] == 0.0
+    assert "каппа Коэна" in caplog.text and "допуск=green" in caplog.text
+
+
+def test_calibrate_measures_judge_bias_and_admission(monkeypatch) -> None:
+    """Судья строже разметчиков: смещение отрицательное, допуск по правилу."""
+    rag_units = pd.DataFrame({"assessment_score": [1.0, 1.0, 1.0, 1.0, 0.0, 0.0]})
+
+    def stricter_judge(_judge, test, source_ids, _count):
+        scores = test["assessment_score"].tolist()
+        scores[0] = 0.0  # одну верную единицу судья счёл дефектом
+        return pd.DataFrame({"agent_assessment_score": scores})
+
+    metrics, _test, _predictions = _calibrate(monkeypatch, rag_units, stricter_judge)
+
+    assert metrics["bias_units"] == metrics["holdout_units"]
+    assert metrics["bias_mean"] < 0.0
+    assert metrics["bias_ci_lower"] <= metrics["bias_mean"] <= metrics["bias_ci_upper"]
+    assert metrics["defect_recall"] == 1.0
+    assert metrics["admission_status"] in {"green", "amber"}
+    assert metrics["admission_reason"]
+
+    strict = _calibrate(monkeypatch, rag_units, stricter_judge, min_holdout_units=50)[0]
+    assert strict["admission_status"] == "not_assessed"
+    assert strict["admission_reason_code"] == "holdout_too_small"
+
+
+def test_monitoring_refusals_are_counted(monkeypatch) -> None:
+    """Отказ судьи на мониторинге — счётчик и статус, а не падение ноды."""
+
+    def fake_calibrate(rag_units, source_ids, *args, **kwargs):
+        test_units = rag_units.iloc[:2].reset_index(drop=True)
+        return {"acc_auto": 0.875}, test_units, pd.DataFrame({"agent_assessment_score": [1.0, 0.0]})
+
+    def refusing_predict(_judge, frame, source_ids, _count):
+        return pd.DataFrame({"agent_assessment_score": [1.0, None]})
+
+    monkeypatch.setattr(
+        assessor, "ModelsConfig", lambda **_kwargs: SimpleNamespace(contour_configs={})
+    )
+    monkeypatch.setattr(assessor, "GigaChatEmbeddings", lambda **_kwargs: object())
+    monkeypatch.setattr(assessor, "_build_judge_model", lambda *_args: (object(), "judge"))
+    monkeypatch.setattr(assessor, "_build_assessor", lambda *_args: object())
+    monkeypatch.setattr(assessor, "_calibrate", fake_calibrate)
+    monkeypatch.setattr(assessor, "_predict", refusing_predict)
+    monkeypatch.setattr(assessor, "_load_instruction", lambda _value: "Оцените ответ.")
+    kwargs = dict(
+        reference_umr=_reference(),
+        monitoring_metric=_metric(),
+        assessor_instruction=Path("instruction.txt"),
+        monitoring_umr=_monitoring(),
+        stage="combined",
+    )
+
+    tolerant = assessor.main(**kwargs, max_invalid_share=0.5)["assessment_result"]
+    assert tolerant["status"] == "computed"
+    assert tolerant["refused_units"] == 1 and tolerant["refused_share"] == 0.5
+    assert tolerant["scored_units"] == 1 and tolerant["total_units"] == 2
+
+    capped = assessor.main(**kwargs, max_invalid_share=0.2)["assessment_result"]
+    assert capped["status"] == "not_computable"
+    assert capped["reason_code"] == "judge_refusals" and capped["refused_units"] == 1
+
+
+def test_descriptor_declares_admission_settings() -> None:
+    import json
+
+    descriptor = json.loads(
+        (Path(__file__).resolve().parents[1] / "descriptor.json").read_text("utf-8")
+    )
+    defaults = {
+        item["parameter"]: item["defaultValue"]
+        for section in descriptor["ui"]["settings"]
+        for component in section["components"]
+        for item in component["config"]["components"]
+    }
+    assert defaults["min_holdout_units"] == 20
+    assert defaults["min_holdout_defect_units"] == 5
+    assert defaults["min_defect_recall"] == 0.5
+    assert defaults["min_kappa"] == 0.2
+    assert defaults["max_invalid_share"] == 0.2
+    assert "admission.py" in descriptor["script"]["runConfiguration"]["sourceFiles"]
 
 
 def test_calibration_metrics_reach_assessment_result(monkeypatch) -> None:

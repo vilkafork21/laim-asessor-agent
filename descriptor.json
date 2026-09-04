@@ -80,6 +80,41 @@
                       "value": "monitoring"
                     }
                   ]
+                },
+                {
+                  "parameter": "min_holdout_units",
+                  "label": "Допуск судьи: минимум единиц holdout",
+                  "uiComponent": "input",
+                  "type": "integer",
+                  "defaultValue": 20
+                },
+                {
+                  "parameter": "min_holdout_defect_units",
+                  "label": "Допуск судьи: минимум единиц критичного класса в holdout",
+                  "uiComponent": "input",
+                  "type": "integer",
+                  "defaultValue": 5
+                },
+                {
+                  "parameter": "min_defect_recall",
+                  "label": "Допуск судьи: минимальная полнота на дефектах",
+                  "uiComponent": "input",
+                  "type": "float",
+                  "defaultValue": 0.5
+                },
+                {
+                  "parameter": "min_kappa",
+                  "label": "Допуск судьи: минимальная каппа Коэна",
+                  "uiComponent": "input",
+                  "type": "float",
+                  "defaultValue": 0.2
+                },
+                {
+                  "parameter": "max_invalid_share",
+                  "label": "Допустимая доля отказов судьи (калибровка и мониторинг)",
+                  "uiComponent": "input",
+                  "type": "float",
+                  "defaultValue": 0.2
                 }
               ]
             }
@@ -169,7 +204,7 @@
       "in": false,
       "type": "default",
       "shape": "shape_model",
-      "description": "Машиночитаемый статус и покрытие расчёта оценок",
+      "description": "Машиночитаемый статус и покрытие расчёта оценок; calibration_metrics.admission_status/admission_reason (допуск судьи 6.3.3), bias_mean/bias_ci_* (смещение судьи к разметчикам), refused_units/refused_share",
       "order": 8
     }
   ],
@@ -181,6 +216,7 @@
       "sourceFiles": [
         "main.py",
         "utils.py",
+        "admission.py",
         "agent/__init__.py",
         "agent/asessor_agent.py",
         "agent/config.py",
