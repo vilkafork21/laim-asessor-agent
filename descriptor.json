@@ -93,7 +93,14 @@
                   "label": "Допуск судьи: минимум единиц критичного класса в holdout",
                   "uiComponent": "input",
                   "type": "integer",
-                  "defaultValue": 5
+                  "defaultValue": 4
+                },
+                {
+                  "parameter": "weak_holdout_defect_units",
+                  "label": "Допуск судьи: ниже этого числа дефектов в holdout допуск жёлтый",
+                  "uiComponent": "input",
+                  "type": "integer",
+                  "defaultValue": 10
                 },
                 {
                   "parameter": "min_defect_recall",

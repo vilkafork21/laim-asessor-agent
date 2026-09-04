@@ -575,7 +575,8 @@ def main(
     llm_model: str = "GigaChat-3-Ultra",
     instruction_llm_preprocessing: bool = False,
     min_holdout_units: int = 20,
-    min_holdout_defect_units: int = 5,
+    min_holdout_defect_units: int = 4,
+    weak_holdout_defect_units: int = 10,
     min_defect_recall: float = 0.5,
     min_kappa: float = 0.2,
     max_invalid_share: float = 0.2,
@@ -583,6 +584,7 @@ def main(
     admission_settings = dict(
         min_holdout_units=min_holdout_units,
         min_holdout_defect_units=min_holdout_defect_units,
+        weak_holdout_defect_units=weak_holdout_defect_units,
         min_defect_recall=min_defect_recall,
         min_kappa=min_kappa,
         max_invalid_share=max_invalid_share,

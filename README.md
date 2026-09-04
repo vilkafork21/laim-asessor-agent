@@ -80,6 +80,16 @@ domain_rag_files_zip (в port_wiring не подключён) ──┤
 | `num_assessors` | `1` | Сколько раз судья независимо оценивает каждую единицу; при `>1` итог — голос большинства |
 | `instruction_llm_preprocessing` | `false` | Включает LLM-структурирование в Markdown и суммаризацию инструкции; по умолчанию инструкция подаётся дословно |
 | `stage` | `combined` | `scoring` — только калибровка; `monitoring` — только разметка трейсов (без `acc_auto`); `combined` — оба |
+| `min_holdout_units` | `20` | Допуск судьи (тест 6.3.3): меньше единиц в holdout — `admission_status = not_assessed` |
+| `min_holdout_defect_units` | `4` | Меньше единиц критичного класса (минимальная оценка) в holdout — `not_assessed`: профиль ошибок не измерим |
+| `weak_holdout_defect_units` | `10` | От `min_holdout_defect_units` до этого числа дефектов — допуск `amber` (профиль ошибок измерен грубо) |
+| `min_defect_recall` | `0.5` | Полнота судьи на критичном классе; ниже — `amber`, вместе с низкой каппой — `red` |
+| `min_kappa` | `0.2` | Каппа Коэна судьи против разметчиков; ниже — `amber`, вместе с низкой полнотой — `red` (судья не лучше моды) |
+| `max_invalid_share` | `0.2` | Допустимая доля отказов судьи: выше — `red` на калибровке и `not_computable/judge_refusals` на мониторинге |
+
+Пороги допуска — временные параметры мониторинга: калиброваны на пилотной
+корзине CI09997554 (283 единицы, около 7 % дефектов, каппа 0.40, полнота 0.75)
+и подлежат пересмотру по мере накопления реальных прогонов.
 
 ## Как проходит прогон
 
@@ -220,16 +230,39 @@ WARNING utils: Судья не обработал %d из %d строк (доп�
 ```json
 {"contract_version": "laim-assessment-result.v1", "status": "computed",
  "assessment_mode": "dialogue", "total_units": 94, "scored_units": 94,
- "calibration_metrics": {"acc_auto": 0.789, "holdout_units": 57,
-   "holdout_defect_units": 4, "baseline_mode_accuracy": 0.930,
-   "cohen_kappa": 0.162, "krippendorff_alpha": 0.135,
-   "spearman_correlation": 0.195, "defect_recall": 0.5,
-   "defect_precision": 0.167}}
+ "refused_units": 0, "refused_share": 0.0,
+ "calibration_metrics": {"acc_auto": 0.877, "holdout_units": 57,
+   "holdout_defect_units": 4, "invalid_share": 0.0,
+   "baseline_mode_accuracy": 0.930, "cohen_kappa": 0.404,
+   "krippendorff_alpha": 0.398, "spearman_correlation": 0.446,
+   "defect_recall": 0.75, "defect_precision": 0.333,
+   "bias_mean": -0.088, "bias_ci_lower": -0.177, "bias_ci_upper": 0.001,
+   "bias_units": 57,
+   "admission_status": "amber", "admission_reason_code": "few_critical_units",
+   "admission_reason": "единиц критичного класса в holdout 4 меньше 10: …"}}
 ```
 
+- `refused_units` / `refused_share` — единицы мониторинга без ответа судьи;
+  при `refused_share > max_invalid_share` статус `not_computable`,
+  `reason_code = judge_refusals`, счётчики и `calibration_metrics` сохраняются.
+- `invalid_share` — доля holdout без ответа судьи на калибровке.
+- `bias_mean`, `bias_ci_lower`, `bias_ci_upper`, `bias_units` — смещение
+  судьи относительно разметчиков на шкале КМ (средняя парная разность
+  «судья − человек» по holdout с 95 % интервалом); `null`, если пар меньше двух.
+  Потребитель — `laim-km-dynamic-test`: поправка КМ мониторинга.
+- `admission_status` — допуск судьи по тесту 6.3.3: `green`, `amber`
+  (усиленный контроль), `red` (прокси-оценки непригодны), `not_assessed`
+  (holdout мал или критичный класс не представлен); `admission_reason_code`
+  ∈ `admitted`, `few_critical_units`, `weak_agreement`,
+  `no_better_than_baseline`, `judge_refusals`, `holdout_too_small`,
+  `critical_class_underrepresented`. Потребители — km и агрегатор.
+- `cohen_kappa` / `krippendorff_alpha` — `null`, если согласие невычислимо
+  (не подменяются нулём); каппа считается по кодам меток, поэтому дробные
+  шкалы допустимы.
+
 `calibration_metrics` присутствует только при `stage` `scoring`/`combined`.
-При `not_computable`: `status`, `total_units: null`, `scored_units: 0`,
-`reason` и `reason_code` из входного контракта, `assessment_mode` — если есть.
+При `not_computable` входного контракта: `status`, `total_units: null`,
+`scored_units: 0`, `reason` и `reason_code` адаптера, `assessment_mode` — если есть.
 
 ## Падение против деградации
 
@@ -245,7 +278,6 @@ WARNING utils: Судья не обработал %d из %d строк (доп�
 | Пустая инструкция (`LLM-оценка требует непустую инструкцию в assessor_instruction`) | `MonitoringContractError` |
 | Артефакт инструкции не найден; в каталоге не ровно один DOCX/TXT; не UTF-8; не DOCX/TXT | `FileNotFoundError`, `ValueError` |
 | Калибровка невозможна: меньше 2 единиц или групп, сплит пуст, судья не ответил ни на одну единицу | `MonitoringContractError` |
-| Судья не ответил больше чем на `max(1, 10%)` строк батча (`JUDGE_FAILURE_TOLERANCE=0.1`) | `RuntimeError` |
 | Неизвестный `stage`; `num_assessors < 1`; не-`giga` модель без `AI_GATEWAY_URL` | `ValueError` |
 | Эмбеддер вернул векторы разной размерности или не по числу чанков | `MonitoringContractError` |
 
@@ -254,10 +286,12 @@ WARNING utils: Судья не обработал %d из %d строк (доп�
 | Контракт `status=not_computable` | `assessment_result.status=not_computable` с `reason`/`reason_code` адаптера; `scored_data` — `monitoring_umr` с `NaN` в `main_metric`; `acc_auto=None` |
 | `domain_rag_files_zip` пуст, недоступен, не распаковался или без поддерживаемых файлов | сообщение в stdout, доменный RAG отключён |
 | Документы домена дали 0 чанков | `WARNING Domain RAG: 0 документов после разбора, доменный контекст отключён` |
-| Отказ судьи на единичных строках в пределах допуска | `WARNING Судья не обработал…`; `main_metric=NaN`, `scored_units` меньше `total_units`; из калибровки такие единицы исключены |
+| Отказ судьи на строках мониторинга | `WARNING Судья не обработал…`; `main_metric=NaN`, `refused_units` растёт; доля выше `max_invalid_share` — `assessment_result.status=not_computable`, `reason_code=judge_refusals`, нода не падает |
+| Отказ судьи на строках holdout | единицы исключены из калибровки, `invalid_share` растёт; выше `max_invalid_share` — `admission_status=red` |
+| Допуск судьи `red` или `not_assessed` | `assessment_result` публикуется как `computed`; решение о непригодности прокси-оценок принимают km (`judge_not_admitted`) и агрегатор |
 | HTTP 429 | общий тормоз узла, `WARNING Квота провайдера исчерпана…`, повтор |
 | Второй проход не ответил | остаётся вердикт первого прохода |
-| Меньше 10 дефектных единиц в holdout | `calibration: в holdout N единиц с минимальной оценкой…` |
+| Меньше `weak_holdout_defect_units` дефектных единиц в holdout | `admission_status=amber`, `few_critical_units` |
 | `accuracy` без `prediction` в трейсах | `monitoring: prediction … недоступен в UMR, судья оценивает output_answer` |
 | Неразмеченные единицы в эталоне | молча исключаются из few-shot и шкалы |
 

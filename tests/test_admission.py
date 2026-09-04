@@ -9,6 +9,7 @@ from admission import admit, judge_bias
 SETTINGS = dict(
     min_holdout_units=20,
     min_holdout_defect_units=5,
+    weak_holdout_defect_units=5,
     min_defect_recall=0.5,
     min_kappa=0.2,
     max_invalid_share=0.2,
@@ -63,3 +64,14 @@ def test_bias_needs_two_pairs():
     assert judge_bias([], []) is None
     with pytest.raises(ValueError, match="одной длины"):
         judge_bias([1.0, 0.0], [1.0])
+
+
+def test_few_critical_units_is_amber_between_minimum_and_weak_threshold():
+    settings = {**SETTINGS, "min_holdout_defect_units": 4, "weak_holdout_defect_units": 10}
+    few = admit(_metrics(holdout_defect_units=4), **settings)
+    assert few.status == "amber" and few.reason_code == "few_critical_units"
+    assert admit(_metrics(holdout_defect_units=12), **settings).status == "green"
+    # Более сильные основания не перекрываются порогом «мало дефектов».
+    weak = admit(_metrics(holdout_defect_units=4, cohen_kappa=0.1), **settings)
+    assert weak.reason_code == "weak_agreement"
+    assert admit(_metrics(holdout_defect_units=3), **settings).reason_code == "critical_class_underrepresented"

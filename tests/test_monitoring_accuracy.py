@@ -204,6 +204,7 @@ def test_monitoring_accuracy_does_not_require_gt(monkeypatch) -> None:
 _ADMISSION = dict(
     min_holdout_units=2,
     min_holdout_defect_units=1,
+    weak_holdout_defect_units=1,
     min_defect_recall=0.5,
     min_kappa=0.2,
     max_invalid_share=0.2,
@@ -327,7 +328,8 @@ def test_descriptor_declares_admission_settings() -> None:
         for item in component["config"]["components"]
     }
     assert defaults["min_holdout_units"] == 20
-    assert defaults["min_holdout_defect_units"] == 5
+    assert defaults["min_holdout_defect_units"] == 4
+    assert defaults["weak_holdout_defect_units"] == 10
     assert defaults["min_defect_recall"] == 0.5
     assert defaults["min_kappa"] == 0.2
     assert defaults["max_invalid_share"] == 0.2
