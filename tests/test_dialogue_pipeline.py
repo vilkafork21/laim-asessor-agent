@@ -120,8 +120,8 @@ def test_dialogue_judge_predicts_only_final_main_metric(monkeypatch) -> None:
         False,
         assessment_contract=assessor._assessment_contract(_metric()),
         admission_settings=dict(
-            min_holdout_units=1, min_holdout_defect_units=0, min_defect_recall=0.5,
-            min_kappa=0.2, max_invalid_share=0.2,
+            min_holdout_units=1, min_holdout_defect_units=0, weak_holdout_defect_units=0,
+            min_defect_recall=0.5, min_kappa=0.2, max_invalid_share=0.2,
         ),
     )
 

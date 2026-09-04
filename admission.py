@@ -29,8 +29,13 @@ def admit(
     min_defect_recall: float,
     min_kappa: float,
     max_invalid_share: float,
+    weak_holdout_defect_units: int = 10,
 ) -> Admission:
-    """Статус допуска судьи по метрикам калибровки."""
+    """Статус допуска судьи по метрикам калибровки.
+
+    Ниже `min_holdout_defect_units` дефектов в holdout профиль ошибок не измерим
+    (не оценено); от минимума до `weak_holdout_defect_units` — измерим грубо,
+    допуск жёлтый с усиленным контролем."""
     holdout = int(metrics["holdout_units"])
     defects = int(metrics["holdout_defect_units"])
     invalid_share = float(metrics["invalid_share"])
@@ -67,6 +72,12 @@ def admit(
             "amber", "weak_agreement",
             f"полнота на дефектах {recall:.2f} (минимум {min_defect_recall:.2f}), каппа "
             f"{kappa_text} (минимум {min_kappa:.2f}): допуск с усиленным контролем",
+        )
+    if defects < weak_holdout_defect_units:
+        return Admission(
+            "amber", "few_critical_units",
+            f"единиц критичного класса в holdout {defects} меньше {weak_holdout_defect_units}: "
+            "профиль ошибок измерен грубо, допуск с усиленным контролем",
         )
     return Admission("green", "admitted", "судья допущен по профилю ошибок на holdout")
 
