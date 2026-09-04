@@ -45,13 +45,6 @@ MAX_QUOTA_ATTEMPTS: int = 6
 QUOTA_BASE_BACKOFF_SECONDS: float = 2.0
 QUOTA_MAX_BACKOFF_SECONDS: float = 60.0
 
-# Судья вправе потерять малую долю строк: такие единицы исключаются из оценки,
-# а не роняют узел. Смерть узла оставлена массовому отказу — метрика по
-# оставшимся строкам была бы уже нерепрезентативной. Нижняя граница в одну
-# строку не даёт единственному сбою убить маленький батч.
-JUDGE_FAILURE_TOLERANCE: float = 0.1
-
-
 # =====================================================
 # FILE SYSTEM OPERATIONS
 # =====================================================
@@ -355,16 +348,11 @@ async def process_with_rate_limit(
         examples = "; ".join(
             f"input {index}: {message[:300]}" for index, message in errors[:3]
         )
-        tolerated = max(1, int(len(batch_inputs) * JUDGE_FAILURE_TOLERANCE))
-        if len(errors) > tolerated:
-            raise RuntimeError(
-                f"Судья не обработал {len(errors)} из {len(batch_inputs)} строк "
-                f"(допустимо {tolerated}). {examples}"
-            )
+        # Отказ судьи — отдельный статус единицы; допустимую долю отказов
+        # применяет main по настройке ноды, здесь только учёт.
         utils_logger.warning(
-            "Судья не обработал %d из %d строк (допустимо %d); "
-            "эти единицы исключены из оценки. %s",
-            len(errors), len(batch_inputs), tolerated, examples,
+            "Судья не обработал %d из %d строк; эти единицы учтены как отказы. %s",
+            len(errors), len(batch_inputs), examples,
         )
     return results
 

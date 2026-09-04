@@ -78,8 +78,12 @@ class AnswersProcessor:
 
 
 def _pair_cohen_kappa(agent_data: pd.Series, human_data: pd.Series) -> float | None:
+    # Метки кодируются по объединённому множеству: sklearn отвергает
+    # нецелые float как «непрерывную» цель, хотя шкала 0.5/1.0 номинальна.
+    codes, _ = pd.factorize(pd.concat([agent_data, human_data], ignore_index=True))
+    agent_codes, human_codes = codes[: len(agent_data)], codes[len(agent_data):]
     try:
-        kappa = cohen_kappa_score(agent_data, human_data)
+        kappa = cohen_kappa_score(agent_codes, human_codes)
     except Exception:
         return None
     return None if np.isnan(kappa) else float(kappa)
@@ -191,9 +195,10 @@ class ResultsScorer:
             if alpha is not None:
                 alphas.append(alpha)
 
+        # Невычислимое согласие — «нет значения», а не уровень случайности 0.0.
         return {
-            "cohen_kappa": float(np.mean(kappas)) if kappas else 0.0,
-            "krippendorff_alpha": float(np.mean(alphas)) if alphas else 0.0,
+            "cohen_kappa": float(np.mean(kappas)) if kappas else None,
+            "krippendorff_alpha": float(np.mean(alphas)) if alphas else None,
         }
 
     def compute_defect_quality(

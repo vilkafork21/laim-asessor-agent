@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from copy import deepcopy
 import io
+import logging
 import os
 from pathlib import Path
 from typing import Annotated
@@ -27,6 +28,9 @@ from laim_monitoring import (
     validate_monitoring_metric,
 )
 from utils import add_voting_columns, extract_zip, read_docx, remove_directory
+from admission import admit, judge_bias
+
+logger = logging.getLogger(__name__)
 
 
 def _load_df(value) -> pd.DataFrame | None:
@@ -365,7 +369,10 @@ def _calibrate(
     train_fraction: float,
     num_assessors: int,
     instruction_llm_preprocessing: bool,
-) -> tuple[dict[str, float], pd.DataFrame, pd.DataFrame]:
+    *,
+    assessment_contract: dict,
+    admission_settings: dict,
+) -> tuple[dict[str, object], pd.DataFrame, pd.DataFrame]:
     if len(rag_units) < 2:
         raise MonitoringContractError("Для calibration требуется минимум две единицы")
     train, test = _split_units(rag_units, source_ids, train_fraction)
@@ -392,9 +399,9 @@ def _calibrate(
             "Calibration невозможна: судья не ответил ни на одну тестовую единицу"
         )
     if not answered.all():
-        print(
-            f"calibration: судья не ответил на {int((~answered).sum())} из "
-            f"{len(answered)} единиц; acc_auto считается по отвеченным"
+        logger.warning(
+            "calibration: судья не ответил на %d из %d единиц; acc_auto считается по отвеченным",
+            int((~answered).sum()), len(answered),
         )
     labels = test[source_ids].reset_index(drop=True)
     comparison = pd.concat(
@@ -406,32 +413,45 @@ def _calibrate(
     )
     score = ResultsScorer(AnswersProcessor()).score(comparison, source_ids)
     labels_used = labels[answered].astype(float)
-    metrics = {
+    # Смещение судьи считается на шкале ключевой метрики: оценка единицы по
+    # контракту у судьи против той же оценки по человеческой разметке.
+    judge_scores = _score_predictions(test, predictions, assessment_contract)
+    human_scores = score_units(test, assessment_contract)
+    paired = answered.to_numpy() & judge_scores.notna().to_numpy() & human_scores.notna().to_numpy()
+    bias = judge_bias(
+        judge_scores[paired].astype(float).tolist(),
+        human_scores[paired].astype(float).tolist(),
+    )
+    metrics: dict[str, object] = {
         "acc_auto": float(score["mean_accuracy"]["Mean accuracy"]),
         "holdout_units": int(len(labels_used)),
         "holdout_defect_units": int(
             (labels_used[source_ids[0]] == labels_used[source_ids[0]].min()).sum()
         ),
+        "invalid_share": float((~answered).sum() / len(answered)),
         "baseline_mode_accuracy": float(score["mean_accuracy"]["Mean mode"]),
         "cohen_kappa": score["cohen_kappa"],
         "krippendorff_alpha": score["krippendorff_alpha"],
         "spearman_correlation": float(score["mean_correlation"]),
         "defect_recall": float(score["defect_recall"]),
         "defect_precision": float(score["defect_precision"]),
+        "bias_mean": None if bias is None else bias["mean"],
+        "bias_ci_lower": None if bias is None else bias["ci_lower"],
+        "bias_ci_upper": None if bias is None else bias["ci_upper"],
+        "bias_units": None if bias is None else bias["units"],
     }
-    if metrics["holdout_defect_units"] < 10:
-        print(
-            f"calibration: в holdout {metrics['holdout_defect_units']} единиц с минимальной "
-            "оценкой — каппа и альфа на таком объёме неустойчивы"
-        )
-    print(
-        f"calibration: acc_auto={metrics['acc_auto']:.3f}, "
-        f"baseline по моде={metrics['baseline_mode_accuracy']:.3f}, "
-        f"каппа Коэна={metrics['cohen_kappa']:.3f}, "
-        f"альфа Криппендорфа={metrics['krippendorff_alpha']:.3f}, "
-        f"корреляция Спирмана={metrics['spearman_correlation']:.3f}, "
-        f"полнота на дефектах={metrics['defect_recall']:.3f}, "
-        f"точность на дефектах={metrics['defect_precision']:.3f}"
+    admission = admit(metrics, **admission_settings)
+    metrics["admission_status"] = admission.status
+    metrics["admission_reason_code"] = admission.reason_code
+    metrics["admission_reason"] = admission.reason
+    logger.info(
+        "calibration: acc_auto=%.3f, baseline по моде=%.3f, каппа Коэна=%s, "
+        "альфа Криппендорфа=%s, корреляция Спирмана=%.3f, полнота на дефектах=%.3f, "
+        "точность на дефектах=%.3f, смещение судьи=%s, допуск=%s (%s)",
+        metrics["acc_auto"], metrics["baseline_mode_accuracy"], metrics["cohen_kappa"],
+        metrics["krippendorff_alpha"], metrics["spearman_correlation"],
+        metrics["defect_recall"], metrics["defect_precision"], metrics["bias_mean"],
+        admission.status, admission.reason,
     )
     return metrics, test, predictions
 
@@ -453,15 +473,30 @@ def _assessment_result(
     units: pd.DataFrame,
     *,
     scores: pd.Series | None = None,
-    calibration_metrics: dict[str, float] | None = None,
+    calibration_metrics: dict[str, object] | None = None,
+    max_invalid_share: float = 1.0,
 ) -> dict[str, object]:
+    total = len(units)
+    scored = total if scores is None else int(scores.notna().sum())
+    refused = total - scored
+    refused_share = refused / total if total else 0.0
     result: dict[str, object] = {
         "contract_version": "laim-assessment-result.v1",
         "status": "computed",
         "assessment_mode": contract["assessment_mode"],
-        "total_units": len(units),
-        "scored_units": len(units) if scores is None else int(scores.notna().sum()),
+        "total_units": total,
+        "scored_units": scored,
+        "refused_units": refused,
+        "refused_share": refused_share,
     }
+    if refused_share > max_invalid_share:
+        # Переизбыток отказов — отдельный статус, а не падение ноды и не
+        # молчаливое сужение выборки.
+        result["status"] = "not_computable"
+        result["reason_code"] = "judge_refusals"
+        result["reason"] = (
+            f"Доля отказов судьи {refused_share:.2f} выше допустимой {max_invalid_share:.2f}"
+        )
     if calibration_metrics is not None:
         result["calibration_metrics"] = calibration_metrics
     return result
@@ -539,7 +574,19 @@ def main(
     model_id: str = "giga",
     llm_model: str = "GigaChat-3-Ultra",
     instruction_llm_preprocessing: bool = False,
+    min_holdout_units: int = 20,
+    min_holdout_defect_units: int = 5,
+    min_defect_recall: float = 0.5,
+    min_kappa: float = 0.2,
+    max_invalid_share: float = 0.2,
 ) -> dict[str, object]:
+    admission_settings = dict(
+        min_holdout_units=min_holdout_units,
+        min_holdout_defect_units=min_holdout_defect_units,
+        min_defect_recall=min_defect_recall,
+        min_kappa=min_kappa,
+        max_invalid_share=max_invalid_share,
+    )
     contract = validate_monitoring_metric(monitoring_metric, require_computed=False)
     if stage not in {"scoring", "monitoring", "combined"}:
         raise ValueError(f"Неизвестный stage: {stage}")
@@ -600,6 +647,8 @@ def main(
             scoring_rag_train_size,
             num_assessors,
             instruction_llm_preprocessing,
+            assessment_contract=assessment_contract,
+            admission_settings=admission_settings,
         )
         acc_auto = calibration_metrics["acc_auto"]
         scores = _score_predictions(
@@ -667,6 +716,7 @@ def main(
             monitoring_units,
             scores=scores,
             calibration_metrics=calibration_metrics,
+            max_invalid_share=max_invalid_share,
         )
     return {
         "scored_data": scored_output,
