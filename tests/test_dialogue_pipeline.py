@@ -109,7 +109,7 @@ def test_dialogue_judge_predicts_only_final_main_metric(monkeypatch) -> None:
 
     monkeypatch.setattr(assessor, "_predict", fake_predict)
 
-    metrics, test_units, predictions = assessor._calibrate(
+    metrics, test_units, predictions, _judge = assessor._calibrate(
         units,
         ["assessment_score"],
         "Оцените весь диалог.",
@@ -142,7 +142,7 @@ def test_dialogue_contour_scores_monitoring_sessions(monkeypatch) -> None:
         predictions = pd.DataFrame({
             f"agent_{source_id}": [1.0] for source_id in source_ids
         })
-        return {"acc_auto": 1.0}, test_units, predictions
+        return {"acc_auto": 1.0}, test_units, predictions, object()
 
     def fake_predict(_judge, frame, source_ids, _count):
         captured["monitoring_units"] = frame

@@ -372,19 +372,16 @@ def _calibrate(
     *,
     assessment_contract: dict,
     admission_settings: dict,
-) -> tuple[dict[str, object], pd.DataFrame, pd.DataFrame]:
+) -> tuple[dict[str, object], pd.DataFrame, pd.DataFrame, Asessor]:
     if len(rag_units) < 2:
         raise MonitoringContractError("Для calibration требуется минимум две единицы")
     train, test = _split_units(rag_units, source_ids, train_fraction)
+    judge = _build_assessor(
+        models, train, source_ids, instruction, domain_path,
+        instruction_llm_preprocessing,
+    )
     predictions = _predict(
-        _build_assessor(
-            models,
-            train,
-            source_ids,
-            instruction,
-            domain_path,
-            instruction_llm_preprocessing,
-        ),
+        judge,
         test,
         source_ids,
         num_assessors,
@@ -453,7 +450,7 @@ def _calibrate(
         metrics["defect_recall"], metrics["defect_precision"], metrics["bias_mean"],
         admission.status, admission.reason,
     )
-    return metrics, test, predictions
+    return metrics, test, predictions, judge
 
 
 def _source_by_role(contract: dict, role: str) -> dict:
@@ -635,12 +632,13 @@ def main(
         BoundedGigaChatEmbeddings(GigaChatEmbeddings(**config.contour_configs)),
     )
 
+    judge = None
     acc_auto = None
     calibration_metrics = None
     scored_output = None
     assessment_result = None
     if stage in {"scoring", "combined"}:
-        calibration_metrics, test_units, predictions = _calibrate(
+        calibration_metrics, test_units, predictions, judge = _calibrate(
             judge_units,
             source_ids,
             instruction,
@@ -689,15 +687,13 @@ def main(
             assessment_contract,
             require_sources=False,
         )
-        predictions = _predict(
-            _build_assessor(
-                models,
-                judge_units,
-                source_ids,
-                instruction,
-                domain_path,
+        if judge is None:
+            judge = _build_assessor(
+                models, judge_units, source_ids, instruction, domain_path,
                 instruction_llm_preprocessing,
-            ),
+            )
+        predictions = _predict(
+            judge,
             monitoring_units,
             source_ids,
             num_assessors,

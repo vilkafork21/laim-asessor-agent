@@ -100,7 +100,7 @@ def test_monitoring_accuracy_without_prediction_column_is_judged(monkeypatch) ->
     def fake_calibrate(rag_units, source_ids, *args, **kwargs):
         test_units = rag_units.iloc[:2].reset_index(drop=True)
         predictions = pd.DataFrame({"agent_assessment_score": [1.0, 0.0]})
-        return {"acc_auto": 0.875}, test_units, predictions
+        return {"acc_auto": 0.875}, test_units, predictions, object()
 
     def fake_predict(_judge, frame, source_ids, _count):
         captured["monitoring_context"] = frame.loc[0, "assessment_context"]
@@ -149,7 +149,7 @@ def test_monitoring_accuracy_does_not_require_gt(monkeypatch) -> None:
         captured["source_ids"] = source_ids
         test_units = rag_units.iloc[:2].reset_index(drop=True)
         predictions = pd.DataFrame({"agent_assessment_score": [1.0, 0.0]})
-        return {"acc_auto": 0.875}, test_units, predictions
+        return {"acc_auto": 0.875}, test_units, predictions, object()
 
     def fake_predict(_judge, frame, source_ids, _count):
         captured["monitoring_columns"] = list(frame.columns)
@@ -240,7 +240,7 @@ def test_calibrate_logs_agreement_metrics(monkeypatch, caplog) -> None:
         )
 
     with caplog.at_level(logging.INFO):
-        metrics, _test, _predictions = _calibrate(monkeypatch, rag_units, fake_predict)
+        metrics, _test, _predictions, _judge = _calibrate(monkeypatch, rag_units, fake_predict)
 
     assert metrics["acc_auto"] == 1.0
     assert metrics["cohen_kappa"] == 1.0
@@ -264,7 +264,7 @@ def test_calibrate_measures_judge_bias_and_admission(monkeypatch) -> None:
         scores[0] = 0.0  # одну верную единицу судья счёл дефектом
         return pd.DataFrame({"agent_assessment_score": scores})
 
-    metrics, _test, _predictions = _calibrate(monkeypatch, rag_units, stricter_judge)
+    metrics, _test, _predictions, _judge = _calibrate(monkeypatch, rag_units, stricter_judge)
 
     assert metrics["bias_units"] == metrics["holdout_units"]
     assert metrics["bias_mean"] < 0.0
@@ -283,7 +283,7 @@ def test_monitoring_refusals_are_counted(monkeypatch) -> None:
 
     def fake_calibrate(rag_units, source_ids, *args, **kwargs):
         test_units = rag_units.iloc[:2].reset_index(drop=True)
-        return {"acc_auto": 0.875}, test_units, pd.DataFrame({"agent_assessment_score": [1.0, 0.0]})
+        return {"acc_auto": 0.875}, test_units, pd.DataFrame({"agent_assessment_score": [1.0, 0.0]}), object()
 
     def refusing_predict(_judge, frame, source_ids, _count):
         return pd.DataFrame({"agent_assessment_score": [1.0, None]})
@@ -348,7 +348,7 @@ def test_calibration_metrics_reach_assessment_result(monkeypatch) -> None:
 
     def fake_calibrate(rag_units, source_ids, *args, **kwargs):
         test_units = rag_units.iloc[:2].reset_index(drop=True)
-        return metrics, test_units, pd.DataFrame({"agent_assessment_score": [1.0, 0.0]})
+        return metrics, test_units, pd.DataFrame({"agent_assessment_score": [1.0, 0.0]}), object()
 
     def fake_predict(_judge, frame, source_ids, _count):
         return pd.DataFrame({"agent_assessment_score": [1.0, 0.0]})
