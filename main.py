@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-from copy import deepcopy
 import io
+import json
 import logging
 import os
 from pathlib import Path
 from typing import Annotated
+from uuid import uuid4
 
 import pandas as pd
 from langchain_core.embeddings import Embeddings
@@ -23,11 +24,10 @@ from laim_monitoring import (
     MonitoringContractError,
     broadcast_scores,
     normalize_umr,
-    score_units,
     unitize,
     validate_monitoring_metric,
 )
-from utils import add_voting_columns, extract_zip, read_docx, remove_directory
+from utils import add_voting_columns, extract_zip, remove_directory
 from admission import admit, judge_bias
 
 logger = logging.getLogger(__name__)
@@ -58,19 +58,6 @@ def _load_df(value) -> pd.DataFrame | None:
     if path.suffix.lower() not in readers:
         raise ValueError(f"Неподдерживаемый DataFrame artifact: {path}")
     return readers[path.suffix.lower()](path)
-
-
-def _load_instruction(value) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, dict):
-        text = value.get("text")
-        if not isinstance(text, str):
-            raise ValueError("instruction dict должен содержать строковый text")
-        if not text.strip():
-            raise ValueError("instruction dict содержит пустой text")
-        return text
-    return read_docx(str(value))
 
 
 def _domain_path(value) -> str | None:
@@ -105,62 +92,45 @@ def _domain_path(value) -> str | None:
 
 
 def _source_instruction(contract: dict) -> str:
-    lines = ["Поля ответа JSON и соответствующие критерии:"]
-    for source in contract["scoring"]["sources"]:
-        lines.append(
-            f"- {source['source_id']}: критерий из колонки {source['column_name']!r}, "
-            f"роль {source['role']}, polarity {source['polarity']}"
-        )
-    return "\n".join(lines)
-
-
-def _assessment_contract(contract: dict) -> dict:
-    """Предсказывать готовый score для accuracy и целого диалога."""
-    if (
-        contract["scoring"]["method"] != "accuracy"
-        and contract["assessment_mode"] != "dialogue"
-    ):
-        return contract
-    result = deepcopy(contract)
-    result["scoring"] = {
-        "method": "identity",
-        "sources": [
-            {
-                "source_id": "assessment_score",
-                "column_name": "main_metric",
-                "role": "final_score",
-                "normalization": "numeric",
-                "polarity": "direct",
-            }
-        ],
-        "missing_policy": contract["scoring"]["missing_policy"],
-        "majority_denominator": None,
-    }
-    return result
-
-
-def _assessment_frame(frame: pd.DataFrame, contract: dict) -> pd.DataFrame:
-    """Выровнять контекст accuracy по prediction эталона и monitoring."""
-    if contract["scoring"]["method"] != "accuracy":
-        return frame
-    prediction = _source_by_role(contract, "prediction")
-    column = prediction["column_name"]
-    if _source_missing(frame, prediction):
-        raise MonitoringContractError(
-            f"UMR не содержит наблюдаемое prediction: {column}"
-        )
-    result = frame.copy()
-    result["output_answer"] = result[column]
-    return result
+    return (contract["evaluation"]["rubric"] + "\nПоле JSON assessment_score: итоговая оценка "
+            f"по шкале {contract['evaluation']['score_values']}. Не имитируй голоса разметчиков.")
 
 
 def _assessor_units(frame: pd.DataFrame, contract: dict, *, require_sources: bool) -> pd.DataFrame:
-    units = unitize(frame, contract)
-    source_ids = [source["source_id"] for source in contract["scoring"]["sources"]]
+    units = unitize(frame, contract, include_sources=False)
+    required = contract["evaluation"]["required_evidence"]
+    prediction = next((source["column_name"] for source in contract["scoring"]["sources"]
+                       if source["role"] == "prediction"), None)
+    for index, row in units.iterrows():
+        first = frame.iloc[row["_row_positions"][0]]
+        session = first.get("session_id")
+        if contract["assessment_mode"] == "qa" and pd.notna(session) and str(session).strip():
+            units.at[index, "_group_id"] = str(session)
+        context = dict(row["assessment_context"])
+        observations = []
+        for position in row["_row_positions"]:
+            observation = frame.iloc[position]
+            evidence = observation.get("evaluation_evidence", {})
+            if isinstance(evidence, str):
+                evidence = json.loads(evidence)
+            if not isinstance(evidence, dict):
+                raise MonitoringContractError("evaluation_evidence должен быть JSON object")
+            missing = [name for name in required if name not in evidence or evidence[name] is None]
+            if missing:
+                raise MonitoringContractError(f"Недоступны обязательные свидетельства: {missing}")
+            item = {"evidence": {name: evidence[name] for name in required}}
+            if prediction:
+                item["observed_prediction"] = observation.get(prediction)
+            observations.append(item)
+        context["observations"] = observations
+        units.at[index, "assessment_context"] = context
     if require_sources:
-        missing = [source_id for source_id in source_ids if source_id not in units]
-        if missing:
-            raise MonitoringContractError(f"RAG не содержит источники MeasurementPlan: {missing}")
+        if "main_metric" not in units:
+            raise MonitoringContractError("Reference не содержит итоговый main_metric")
+        scores = pd.to_numeric(units["main_metric"], errors="raise")
+        if not scores.dropna().isin(contract["evaluation"]["score_values"]).all():
+            raise MonitoringContractError("Reference main_metric выходит за утверждённый score_values")
+        units["assessment_score"] = scores
     return units
 
 
@@ -272,22 +242,11 @@ def _predict(asessor: Asessor, frame: pd.DataFrame, source_ids: list[str], count
 
 
 def _score_predictions(units: pd.DataFrame, predictions: pd.DataFrame, contract: dict) -> pd.Series:
-    source_ids = [source["source_id"] for source in contract["scoring"]["sources"]]
-    values = units.copy()
-    for source_id in source_ids:
-        values[source_id] = predictions[f"agent_{source_id}"].tolist()
-    # Строка без единого поля ответа — это отказ судьи, а не пропуск в данных:
-    # missing_policy контракта (в том числе fail) к ней не применяется, единица
-    # просто исключается из оценки.
-    failed = (
-        predictions[[f"agent_{source_id}" for source_id in source_ids]]
-        .isna()
-        .all(axis=1)
-        .to_numpy()
-    )
-    scores = pd.Series(float("nan"), index=values.index, dtype="float64")
-    scores.iloc[~failed] = score_units(values.iloc[~failed], contract).to_numpy()
-    return scores
+    scores = pd.to_numeric(predictions["agent_assessment_score"], errors="raise")
+    allowed = contract["evaluation"]["score_values"]
+    if not scores.dropna().isin(allowed).all():
+        raise MonitoringContractError(f"Судья вернул оценку вне объявленной шкалы: {allowed}")
+    return pd.Series(scores.to_numpy(), index=units.index, dtype="float64")
 
 
 def _broadcast_predictions(
@@ -314,11 +273,13 @@ def _build_assessor(
     instruction,
     domain_path,
     instruction_llm_preprocessing,
+    score_values,
 ):
     return Asessor(
         llm=models[0],
         embedding_model=models[1],
         dataset=rag_units,
+        score_values=score_values,
         context_columns=["assessment_context"],
         answer_columns=source_ids,
         instruction=instruction,
@@ -378,7 +339,7 @@ def _calibrate(
     train, test = _split_units(rag_units, source_ids, train_fraction)
     judge = _build_assessor(
         models, train, source_ids, instruction, domain_path,
-        instruction_llm_preprocessing,
+        instruction_llm_preprocessing, assessment_contract["evaluation"]["score_values"],
     )
     predictions = _predict(
         judge,
@@ -408,12 +369,16 @@ def _calibrate(
         ],
         axis=1,
     )
-    score = ResultsScorer(AnswersProcessor()).score(comparison, source_ids)
+    score = ResultsScorer(AnswersProcessor()).score(
+        comparison, source_ids,
+        defect_threshold=assessment_contract["evaluation"]["defect_threshold"],
+        higher_is_better=assessment_contract["evaluation"]["higher_is_better"],
+    )
     labels_used = labels[answered].astype(float)
     # Смещение судьи считается на шкале ключевой метрики: оценка единицы по
     # контракту у судьи против той же оценки по человеческой разметке.
     judge_scores = _score_predictions(test, predictions, assessment_contract)
-    human_scores = score_units(test, assessment_contract)
+    human_scores = test["assessment_score"].astype(float)
     paired = answered.to_numpy() & judge_scores.notna().to_numpy() & human_scores.notna().to_numpy()
     bias = judge_bias(
         judge_scores[paired].astype(float).tolist(),
@@ -423,7 +388,9 @@ def _calibrate(
         "acc_auto": float(score["mean_accuracy"]["Mean accuracy"]),
         "holdout_units": int(len(labels_used)),
         "holdout_defect_units": int(
-            (labels_used[source_ids[0]] == labels_used[source_ids[0]].min()).sum()
+            (labels_used[source_ids[0]] < assessment_contract["evaluation"]["defect_threshold"]).sum()
+            if assessment_contract["evaluation"]["higher_is_better"] else
+            (labels_used[source_ids[0]] > assessment_contract["evaluation"]["defect_threshold"]).sum()
         ),
         "invalid_share": float((~answered).sum() / len(answered)),
         "baseline_mode_accuracy": float(score["mean_accuracy"]["Mean mode"]),
@@ -478,7 +445,8 @@ def _assessment_result(
     refused = total - scored
     refused_share = refused / total if total else 0.0
     result: dict[str, object] = {
-        "contract_version": "laim-assessment-result.v1",
+        "contract_version": "laim-assessment-result.v2",
+        "definition_id": contract.get("definition_id"),
         "status": "computed",
         "assessment_mode": contract["assessment_mode"],
         "total_units": total,
@@ -506,7 +474,8 @@ def _assessment_result(
 
 def _unavailable_result(contract: dict) -> dict[str, object]:
     result: dict[str, object] = {
-        "contract_version": "laim-assessment-result.v1",
+        "contract_version": "laim-assessment-result.v2",
+        "definition_id": contract.get("definition_id"),
         "status": "not_computable",
         "total_units": None,
         "scored_units": 0,
@@ -567,7 +536,6 @@ def _build_judge_model(model_id: str, config: ModelsConfig, llm_model: str):
 def main(
     reference_umr: pd.DataFrame,
     monitoring_metric: dict,
-    assessor_instruction: Path | None = None,
     monitoring_umr: pd.DataFrame | None = None,
     scoring_rag_train_size: float = 0.8,
     domain_rag_files_zip: Path | None = None,
@@ -575,7 +543,6 @@ def main(
     num_assessors: int = 1,
     model_id: str = "giga",
     llm_model: str = "GigaChat-3-Ultra",
-    instruction_llm_preprocessing: bool = False,
     min_holdout_units: int = 20,
     min_holdout_defect_units: int = 4,
     weak_holdout_defect_units: int = 10,
@@ -583,6 +550,7 @@ def main(
     min_kappa: float = 0.2,
     max_invalid_share: float = 0.2,
 ) -> dict[str, object]:
+    instruction_llm_preprocessing = False
     admission_settings = dict(
         min_holdout_units=min_holdout_units,
         min_holdout_defect_units=min_holdout_defect_units,
@@ -636,25 +604,41 @@ def main(
                     }),
                 }
 
-    assessment_contract = _assessment_contract(contract)
+    reference_umr = _load_df(reference_umr)
+    for name, frame in (("reference_umr", reference_umr), ("monitoring_umr", monitoring_umr)):
+        if frame is None:
+            continue
+        expected_role = "reference" if name == "reference_umr" else "monitoring"
+        roles = frame.get("dataset_role")
+        if roles is None or not roles.eq(expected_role).all():
+            raise MonitoringContractError(f"{name}.dataset_role не соответствует назначению данных")
+        identifiers = frame.get("definition_id")
+        if identifiers is None or not identifiers.eq(contract["definition_id"]).all():
+            raise MonitoringContractError(f"{name}.definition_id не соответствует утверждённому определению")
+    assessment_contract = contract
+    if stage in {"monitoring", "combined"}:
+        ready = monitoring_umr.get("evaluation_ready")
+        if ready is None or not ready.eq(True).all():
+            reason = "Конвертер не подтвердил полноту данных для оценки"
+            logger.warning(reason)
+            return {"scored_data": _unavailable_scored_data(monitoring_umr), "acc_auto": None,
+                    "assessment_result": _unavailable_result({**contract,
+                        "reason_code": "evidence_unavailable", "reason": reason})}
+        _assessor_units(monitoring_umr, contract, require_sources=False)
     # Packed dialogue разворачивается до построения units: broadcast_scores
     # пишет по позициям, поэтому reference_umr обязан совпадать с ними построчно.
     reference_umr = normalize_umr(_load_df(reference_umr), contract)
-    rag_assessment = _assessment_frame(reference_umr, contract)
     rag_units = _assessor_units(
-        rag_assessment,
+        reference_umr,
         assessment_contract,
         require_sources=True,
     )
-    source_ids = [
-        source["source_id"] for source in assessment_contract["scoring"]["sources"]
-    ]
-    instruction = _load_instruction(assessor_instruction)
+    source_ids = ["assessment_score"]
+    instruction = _source_instruction(contract)
     if not instruction.strip():
         raise MonitoringContractError(
             "LLM-оценка требует непустую инструкцию в assessor_instruction"
         )
-    instruction += "\n\n" + _source_instruction(assessment_contract)
     domain_path = _domain_path(domain_rag_files_zip)
 
     judge_units = _labelled_reference_units(rag_units, source_ids)
@@ -703,16 +687,15 @@ def main(
         )
 
     if stage in {"monitoring", "combined"} and monitoring_umr is not None:
-        monitoring_assessment = _assessment_frame(monitoring_umr, contract)
         monitoring_units = _assessor_units(
-            monitoring_assessment,
+            monitoring_umr,
             assessment_contract,
             require_sources=False,
         )
         if judge is None:
             judge = _build_assessor(
                 models, judge_units, source_ids, instruction, domain_path,
-                instruction_llm_preprocessing,
+                instruction_llm_preprocessing, contract["evaluation"]["score_values"],
             )
         predictions = _predict(
             judge,
@@ -738,6 +721,10 @@ def main(
             calibration_metrics=calibration_metrics,
             max_invalid_share=max_invalid_share,
         )
+    assessment_result["run_id"] = uuid4().hex
+    if scored_output is not None:
+        scored_output["assessment_run_id"] = assessment_result["run_id"]
+    assessment_result["purpose"] = "calibration" if stage == "scoring" else "monitoring"
     return {
         "scored_data": scored_output,
         "acc_auto": acc_auto,

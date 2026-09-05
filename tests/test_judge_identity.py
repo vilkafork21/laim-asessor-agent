@@ -25,7 +25,6 @@ def test_combined_uses_calibrated_judge_without_holdout_in_rag(monkeypatch):
     monkeypatch.setattr(assessor, 'ModelsConfig', lambda **_: SimpleNamespace(contour_configs={}))
     monkeypatch.setattr(assessor, 'GigaChatEmbeddings', lambda **_: object())
     monkeypatch.setattr(assessor, '_build_judge_model', lambda *_: (object(), 'judge'))
-    monkeypatch.setattr(assessor, '_load_instruction', lambda _: 'Оцените маршрут.')
     monkeypatch.setattr(assessor, '_build_assessor', build)
     monkeypatch.setattr(assessor, '_predict', predict)
 

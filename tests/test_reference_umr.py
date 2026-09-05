@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.measurement_fixture import reviewed_metric
+
 import pandas as pd
 import pytest
 
@@ -9,8 +11,8 @@ from laim_monitoring import MonitoringContractError, broadcast_scores, normalize
 
 
 def _contract(mode: str) -> dict:
-    return {
-        "contract_version": "laim-monitoring-metric.v2", "umr_version": "laim-umr.v2",
+    return reviewed_metric({
+        "contract_version": "laim-monitoring-metric.v3", "umr_version": "laim-umr.v2",
         "status": "computed", "basket_id": "CI1", "name": "quality", "score_column": "main_metric",
         "assessment_mode": mode,
         "scoring": {
@@ -32,7 +34,7 @@ def _contract(mode: str) -> dict:
             "affects_monitoring": False,
         },
         "evidence": {},
-    }
+    })
 
 
 def test_packed_dialogue_reference_is_unitized_per_session():
@@ -93,7 +95,7 @@ def test_plan_less_refusal_returns_not_computable_instead_of_crashing():
     import main as assessor
 
     refusal = {
-        "contract_version": "laim-monitoring-metric.v2",
+        "contract_version": "laim-monitoring-metric.v3",
         "umr_version": "laim-umr.v2",
         "status": "not_computable",
         "basket_id": "CI1",
@@ -114,3 +116,12 @@ def test_plan_less_refusal_returns_not_computable_instead_of_crashing():
     assert result["assessment_result"]["status"] == "not_computable"
     assert result["acc_auto"] is None
     assert result["scored_data"]["main_metric"].isna().all()
+
+
+def test_session_identity_is_case_sensitive():
+    frame = pd.DataFrame({
+        "session_id": ["Session-A", "session-a"], "query_id": ["q1", "q2"],
+        "input_query": ["q", "q"], "output_answer": ["a", "a"],
+        "main_metric": [1.0, 1.0],
+    })
+    assert len(unitize(frame, _contract("dialogue"))) == 2

@@ -54,13 +54,6 @@
                   "defaultValue": 1
                 },
                 {
-                  "parameter": "instruction_llm_preprocessing",
-                  "label": "LLM-переформатирование и суммаризация инструкции (по умолчанию оригинал дословно)",
-                  "uiComponent": "checkbox",
-                  "type": "boolean",
-                  "defaultValue": false
-                },
-                {
                   "parameter": "stage",
                   "label": "Stage",
                   "uiComponent": "select",
@@ -151,7 +144,7 @@
       "in": true,
       "type": "default",
       "shape": "shape_model",
-      "description": "Валидированный контракт laim-monitoring-metric.v2",
+      "description": "Валидированный контракт laim-monitoring-metric.v3",
       "required": true,
       "order": 2
     },
@@ -166,17 +159,6 @@
       "order": 3
     },
     {
-      "name": "assessor_instruction",
-      "label": "Assessor instruction",
-      "in": true,
-      "type": "default",
-      "shape": "shape_model",
-      "description": "Инструкция разметки (DOCX или UTF-8 TXT); обязательна: судья размечает по ней",
-      "required": true,
-      "order": 4,
-      "getPortAsLocalPath": true
-    },
-    {
       "name": "domain_rag_files_zip",
       "label": "domain_rag_files_zip",
       "in": true,
@@ -184,7 +166,7 @@
       "shape": "shape_model",
       "description": "Файлы в формате .docx или машино-читаемые .pdf для заполнения доменной базы знаний.",
       "required": false,
-      "order": 5,
+      "order": 4,
       "getPortAsLocalPath": true
     },
     {
@@ -194,7 +176,7 @@
       "type": "dataframe",
       "shape": "shape_dataframe",
       "description": "UMR с main_metric судьи; для dialogue одна итоговая оценка сессии повторяется в её turn-строках",
-      "order": 6
+      "order": 5
     },
     {
       "name": "acc_auto",
@@ -203,7 +185,7 @@
       "type": "default",
       "shape": "shape_model",
       "description": "Точность судьи на holdout эталона: для dialogue доля совпадений итогового session-level main_metric",
-      "order": 7
+      "order": 6
     },
     {
       "name": "assessment_result",
@@ -212,7 +194,7 @@
       "type": "default",
       "shape": "shape_model",
       "description": "Машиночитаемый статус и покрытие расчёта оценок; calibration_metrics.admission_status/admission_reason (допуск судьи 6.3.3), bias_mean/bias_ci_* (смещение судьи к разметчикам), refused_units/refused_share",
-      "order": 8
+      "order": 7
     }
   ],
   "script": {
@@ -235,7 +217,8 @@
         "retriever/doc_loaders.py",
         "retriever/retriever.py",
         "laim_monitoring/__init__.py",
-        "laim_monitoring/core.py"
+        "laim_monitoring/core.py",
+        "measurement.py"
       ],
       "libraryDependencies": [
         "requirements.txt"

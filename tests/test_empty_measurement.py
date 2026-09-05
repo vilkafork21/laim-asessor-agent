@@ -25,3 +25,23 @@ def test_empty_monitoring_does_not_initialize_models(monkeypatch):
     assert result["assessment_result"]["reason_code"] == "no_monitoring_units"
     assert result["assessment_result"]["total_units"] == 0
     assert result["scored_data"].empty
+
+
+def test_unconfirmed_evidence_does_not_reach_judge(monkeypatch):
+    from tests.test_monitoring_accuracy import _monitoring
+    import main as assessor
+    def forbidden(*args, **kwargs):
+        raise AssertionError("LLM не должен запускаться без подтверждения данных")
+    monkeypatch.setattr(assessor, "_build_judge_model", forbidden)
+    output = assessor.main(_reference(), _metric(),
+                           monitoring_umr=_monitoring().assign(evaluation_ready=False))
+    assert output["assessment_result"]["reason_code"] == "evidence_unavailable"
+    assert output["scored_data"]["main_metric"].isna().all()
+
+
+def test_foreign_definition_does_not_reach_judge():
+    import pytest
+    import main as assessor
+    from tests.test_monitoring_accuracy import _monitoring
+    with pytest.raises(assessor.MonitoringContractError, match="definition_id"):
+        assessor.main(_reference(), _metric(), monitoring_umr=_monitoring().assign(definition_id="1" * 64))

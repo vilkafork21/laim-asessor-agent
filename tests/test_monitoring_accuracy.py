@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.measurement_fixture import reviewed_metric
+
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -9,7 +11,7 @@ import main as assessor
 
 
 def _metric() -> dict[str, object]:
-    return {
+    return reviewed_metric({
         "contract_version": "laim-monitoring-metric.v2",
         "umr_version": "laim-umr.v2",
         "status": "computed",
@@ -48,7 +50,7 @@ def _metric() -> dict[str, object]:
             "recomputed_value": 0.94,
         },
         "primary_validation": {"affects_monitoring": False},
-    }
+    })
 
 
 def _reference() -> pd.DataFrame:
@@ -62,7 +64,7 @@ def _reference() -> pd.DataFrame:
             "main_metric": [1.0, 0.0, 1.0, 1.0],
             "input_query_count": [1, 1, 1, 1],
         }
-    )
+    ).assign(definition_id=_metric()["definition_id"], evaluation_ready=True, dataset_role="reference")
 
 
 def _monitoring() -> pd.DataFrame:
@@ -75,22 +77,15 @@ def _monitoring() -> pd.DataFrame:
             "class": ["route-a", "route-b"],
             "input_query_count": [1, 1],
         }
-    )
+    ).assign(definition_id=_metric()["definition_id"], evaluation_ready=True, dataset_role="monitoring")
 
 
 def test_accuracy_is_assessed_from_reference_main_metric() -> None:
-    contract = assessor._assessment_contract(_metric())
+    contract = _metric()
 
-    assert contract["scoring"]["method"] == "identity"
-    assert contract["scoring"]["sources"] == [
-        {
-            "source_id": "assessment_score",
-            "column_name": "main_metric",
-            "role": "final_score",
-            "normalization": "numeric",
-            "polarity": "direct",
-        }
-    ]
+    units = assessor._assessor_units(_reference(), contract, require_sources=True)
+    assert contract["scoring"]["method"] == "accuracy"
+    assert units["assessment_score"].tolist() == _reference()["main_metric"].tolist()
 
 
 def test_monitoring_accuracy_without_prediction_column_is_not_computable() -> None:
@@ -131,16 +126,11 @@ def test_monitoring_accuracy_does_not_require_gt(monkeypatch) -> None:
     monkeypatch.setattr(assessor, "_build_assessor", lambda *_args: object())
     monkeypatch.setattr(assessor, "_calibrate", fake_calibrate)
     monkeypatch.setattr(assessor, "_predict", fake_predict)
-    monkeypatch.setattr(
-        assessor,
-        "_load_instruction",
-        lambda _value: "Оцените корректность выбранного маршрута.",
-    )
 
     result = assessor.main(
         reference_umr=_reference(),
         monitoring_metric=_metric(),
-        assessor_instruction=Path("instruction.txt"),
+
         monitoring_umr=_monitoring(),
         stage="combined",
     )
@@ -148,7 +138,8 @@ def test_monitoring_accuracy_does_not_require_gt(monkeypatch) -> None:
     assert captured["source_ids"] == ["assessment_score"]
     monitoring_context = captured["monitoring_context"]
     assert isinstance(monitoring_context, dict)
-    assert monitoring_context["current_turn"]["output_answer"] == "route-a"
+    assert monitoring_context["current_turn"]["output_answer"] == "answer-1"
+    assert monitoring_context["observations"][0]["observed_prediction"] == "route-a"
     assert "GT" not in _monitoring()
     assert result["acc_auto"] == 0.875
     assessment_result = result["assessment_result"]
@@ -185,7 +176,7 @@ def _calibrate(monkeypatch, rag_units, fake_predict, **overrides):
         0.5,
         1,
         False,
-        assessment_contract=assessor._assessment_contract(_metric()),
+        assessment_contract=_metric(),
         admission_settings={**_ADMISSION, **overrides},
     )
 
@@ -258,11 +249,10 @@ def test_monitoring_refusals_are_counted(monkeypatch) -> None:
     monkeypatch.setattr(assessor, "_build_assessor", lambda *_args: object())
     monkeypatch.setattr(assessor, "_calibrate", fake_calibrate)
     monkeypatch.setattr(assessor, "_predict", refusing_predict)
-    monkeypatch.setattr(assessor, "_load_instruction", lambda _value: "Оцените ответ.")
     kwargs = dict(
         reference_umr=_reference(),
         monitoring_metric=_metric(),
-        assessor_instruction=Path("instruction.txt"),
+
         monitoring_umr=_monitoring(),
         stage="combined",
     )
@@ -327,16 +317,11 @@ def test_calibration_metrics_reach_assessment_result(monkeypatch) -> None:
     monkeypatch.setattr(assessor, "_build_assessor", lambda *_args: object())
     monkeypatch.setattr(assessor, "_calibrate", fake_calibrate)
     monkeypatch.setattr(assessor, "_predict", fake_predict)
-    monkeypatch.setattr(
-        assessor,
-        "_load_instruction",
-        lambda _value: "Оцените корректность выбранного маршрута.",
-    )
 
     result = assessor.main(
         reference_umr=_reference(),
         monitoring_metric=_metric(),
-        assessor_instruction=Path("instruction.txt"),
+
         monitoring_umr=_monitoring(),
         stage="combined",
     )

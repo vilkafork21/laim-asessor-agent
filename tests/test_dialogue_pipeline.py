@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from tests.measurement_fixture import reviewed_metric
+
 from types import SimpleNamespace
 
 import pandas as pd
@@ -12,7 +13,7 @@ import main as assessor
 
 def _metric() -> dict[str, object]:
     """Контракт adapter для диалоговой корзины с тремя голосами разметчиков."""
-    return {
+    return reviewed_metric({
         "contract_version": "laim-monitoring-metric.v2",
         "umr_version": "laim-umr.v2",
         "status": "computed",
@@ -46,7 +47,7 @@ def _metric() -> dict[str, object]:
             "verdict": None, "affects_monitoring": False,
         },
         "evidence": {},
-    }
+    })
 
 
 def _reference_packed() -> pd.DataFrame:
@@ -63,7 +64,7 @@ def _reference_packed() -> pd.DataFrame:
         "mark_2_metric": [1.0, 1.0, 1.0],
         "mark_3_metric": [1.0, 0.0, 1.0],
         "main_metric": [1.0, 0.0, 0.0],
-    })
+    }).assign(definition_id=_metric()["definition_id"], evaluation_ready=True, dataset_role="reference")
 
 
 def _monitoring_packed() -> pd.DataFrame:
@@ -76,21 +77,12 @@ def _monitoring_packed() -> pd.DataFrame:
             "[('mt3', 'какой у меня потенциал', 'Ваш кредитный потенциал...')]",
         ],
         "input_query_count": [1, 1],
-    })
+    }).assign(definition_id=_metric()["definition_id"], evaluation_ready=True, dataset_role="monitoring")
 
 
 def test_dialogue_judge_predicts_only_final_main_metric(monkeypatch) -> None:
-    contract = assessor._assessment_contract(_metric())
-    source = contract["scoring"]["sources"]
-
-    assert contract["scoring"]["method"] == "identity"
-    assert source == [{
-        "source_id": "assessment_score",
-        "column_name": "main_metric",
-        "role": "final_score",
-        "normalization": "numeric",
-        "polarity": "direct",
-    }]
+    contract = _metric()
+    assert contract["scoring"]["method"] == "all_assessors"
     source_instruction = assessor._source_instruction(contract)
     assert "assessment_score" in source_instruction
     assert "mark_1_metric" not in source_instruction
@@ -118,7 +110,7 @@ def test_dialogue_judge_predicts_only_final_main_metric(monkeypatch) -> None:
         0.67,
         1,
         False,
-        assessment_contract=assessor._assessment_contract(_metric()),
+        assessment_contract=_metric(),
         admission_settings=dict(
             min_holdout_units=1, min_holdout_defect_units=0, weak_holdout_defect_units=0,
             min_defect_recall=0.5, min_kappa=0.2, max_invalid_share=0.2,
@@ -158,14 +150,11 @@ def test_dialogue_contour_scores_monitoring_sessions(monkeypatch) -> None:
     monkeypatch.setattr(assessor, "_build_assessor", lambda *_args: object())
     monkeypatch.setattr(assessor, "_calibrate", fake_calibrate)
     monkeypatch.setattr(assessor, "_predict", fake_predict)
-    monkeypatch.setattr(
-        assessor, "_load_instruction", lambda _value: "Оцените ответы по кредитам."
-    )
 
     result = assessor.main(
         reference_umr=_reference_packed(),
         monitoring_metric=_metric(),
-        assessor_instruction=Path("instruction.txt"),
+
         monitoring_umr=_monitoring_packed(),
         stage="combined",
     )
