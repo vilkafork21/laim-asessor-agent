@@ -202,7 +202,8 @@ class ResultsScorer:
         }
 
     def compute_defect_quality(
-        self, full_dataset: pd.DataFrame, answer_columns: list[str]
+        self, full_dataset: pd.DataFrame, answer_columns: list[str],
+        *, defect_threshold: float, higher_is_better: bool,
     ) -> dict[str, float]:
         """Полнота и точность судьи на дефектах — то, ради чего работает мониторинг.
 
@@ -219,10 +220,11 @@ class ResultsScorer:
             agent = pd.to_numeric(full_dataset.loc[mask, agent_col], errors="coerce")
             if human.isna().all() or agent.isna().all():
                 continue
-            floor = human.min()
-            defects += int((human == floor).sum())
-            flagged += int((agent == floor).sum())
-            caught += int(((human == floor) & (agent == floor)).sum())
+            human_defect = human < defect_threshold if higher_is_better else human > defect_threshold
+            agent_defect = agent < defect_threshold if higher_is_better else agent > defect_threshold
+            defects += int(human_defect.sum())
+            flagged += int(agent_defect.sum())
+            caught += int((human_defect & agent_defect).sum())
 
         return {
             "defect_recall": caught / defects if defects else 0.0,
@@ -233,12 +235,15 @@ class ResultsScorer:
         self,
         full_dataset: pd.DataFrame,
         answer_columns: list[str],
+        *, defect_threshold: float, higher_is_better: bool,
     ) -> dict[str, Any]:
         """Вычисляет все метрики для оценки асессора."""
         mean_correlation = self.compute_correlation(full_dataset, answer_columns)
         mean_accuracy_dict = self.compute_mean_accuracy(full_dataset, answer_columns)
         agreement = self.compute_agreement(full_dataset, answer_columns)
-        defects = self.compute_defect_quality(full_dataset, answer_columns)
+        defects = self.compute_defect_quality(
+            full_dataset, answer_columns, defect_threshold=defect_threshold,
+            higher_is_better=higher_is_better)
 
         return {
             "mean_correlation": mean_correlation,

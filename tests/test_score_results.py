@@ -22,7 +22,7 @@ def test_score_reports_full_agreement_metrics():
         "agent_score": [1, 2, 1, 2],
     })
 
-    result = ResultsScorer(AnswersProcessor()).score(frame, ["score"])
+    result = ResultsScorer(AnswersProcessor()).score(frame, ["score"], defect_threshold=1, higher_is_better=True)
 
     assert result["cohen_kappa"] == 1.0
     assert result["krippendorff_alpha"] == 1.0
@@ -34,7 +34,7 @@ def test_cohen_kappa_penalizes_chance_agreement():
         "agent_score": [1, 1, 1, 1],
     })
 
-    result = ResultsScorer(AnswersProcessor()).score(frame, ["score"])
+    result = ResultsScorer(AnswersProcessor()).score(frame, ["score"], defect_threshold=1, higher_is_better=True)
 
     assert result["mean_accuracy"]["Mean accuracy"] == 0.5
     assert result["cohen_kappa"] == 0.0
@@ -48,7 +48,7 @@ def test_cohen_kappa_handles_non_integral_scale():
         "agent_score": [0.5, 1.0, 0.5, 1.0],
     })
 
-    result = ResultsScorer(AnswersProcessor()).score(frame, ["score"])
+    result = ResultsScorer(AnswersProcessor()).score(frame, ["score"], defect_threshold=1, higher_is_better=True)
 
     assert result["cohen_kappa"] == 1.0
 
@@ -56,7 +56,7 @@ def test_cohen_kappa_handles_non_integral_scale():
 def test_incomputable_agreement_is_none_not_zero():
     frame = pd.DataFrame({"score": [1.0, 0.0], "agent_score": [None, None]})
 
-    result = ResultsScorer(AnswersProcessor()).score(frame, ["score"])
+    result = ResultsScorer(AnswersProcessor()).score(frame, ["score"], defect_threshold=1, higher_is_better=True)
 
     assert result["cohen_kappa"] is None
     assert result["krippendorff_alpha"] is None
@@ -69,7 +69,7 @@ def test_defect_recall_exposes_blind_judge():
         "agent_score": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
     })
 
-    result = ResultsScorer(AnswersProcessor()).score(frame, ["score"])
+    result = ResultsScorer(AnswersProcessor()).score(frame, ["score"], defect_threshold=1, higher_is_better=True)
 
     assert result["mean_accuracy"]["Mean accuracy"] > 0.6
     assert result["defect_recall"] == 0.0
@@ -82,7 +82,7 @@ def test_defect_recall_counts_caught_defects():
         "agent_score": [0.0, 0.0, 0.0, 1.0, 0.0, 1.0],
     })
 
-    result = ResultsScorer(AnswersProcessor()).score(frame, ["score"])
+    result = ResultsScorer(AnswersProcessor()).score(frame, ["score"], defect_threshold=1, higher_is_better=True)
 
     assert result["defect_recall"] == 0.75
     assert result["defect_precision"] == 0.75

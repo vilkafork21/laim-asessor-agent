@@ -2,7 +2,6 @@
 
 import json
 
-import pandas as pd
 from langchain_core.prompts import ChatPromptTemplate
 
 from agent.asessor_agent import _serialize_llm_record
@@ -56,7 +55,7 @@ def test_dialogue_context_serialization_keeps_order_and_tail():
 def test_sds_structured_contract_requests_the_same_flat_object():
     schema = create_simple_output_model(
         ["correct"],
-        pd.DataFrame({"correct": [0, 1]}),
+        [0, 1],
     )
 
     contract = _structured_contract(schema)
@@ -67,7 +66,7 @@ def test_sds_structured_contract_requests_the_same_flat_object():
 
 
 def test_sds_parser_prefers_final_flat_object_but_accepts_legacy_wrapper():
-    schema = create_simple_output_model(["correct"], pd.DataFrame({"correct": [0, 1]}))
+    schema = create_simple_output_model(["correct"], [0, 1])
     payload = _extract_json_object(
         '<think>{"answer":{"correct":0}}</think>\n{"correct":1}'
     )
@@ -77,20 +76,7 @@ def test_sds_parser_prefers_final_flat_object_but_accepts_legacy_wrapper():
     assert _validate_structured({"answer": {"correct": 0}}, schema).correct == 0
 
 
-def test_system_prompt_calibrates_judge_strictness():
-    """Судья штрафует только по инструкции, в пограничном случае — зачёт."""
-    rendered = ChatPromptTemplate.from_messages([SYSTEM_PROMPT]).format_messages(
-        instructions="Оцените корректность.",
-        examples="[]",
-        domain_knowledge="",
-        answer_columns_values_set={"correct": [0, 1]},
-        user_input="{}",
-    )[0].content
-
-    assert "<Калибровка строгости>" in rendered
-    assert "только за нарушения, прямо названные в инструкции" in rendered
-    assert "невозможно проверить по представленным данным" in rendered
-    # Калибровка примыкает к инструкции разметки и говорит в значениях шкалы:
-    # оба свойства измеримо влияют на строгость судьи.
-    assert rendered.index("<Калибровка строгости>") < rendered.index("<Примеры>")
-    assert "выбирай значение шкалы, означающее отсутствие" in rendered
+def test_unknown_evidence_requires_abstention_instead_of_automatic_pass():
+    assert '"not_assessable"' in SYSTEM_PROMPT
+    assert "Отсутствие сведений не доказывает ни успех, ни дефект" in SYSTEM_PROMPT
+    assert "в бинарной шкале — большее" not in SYSTEM_PROMPT
