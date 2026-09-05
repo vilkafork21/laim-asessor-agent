@@ -317,6 +317,18 @@ def _split_units(
     mask = rag_units["_group_id"].isin(selected) if grouped else rag_units.index.isin(selected)
     train = rag_units[mask].reset_index(drop=True)
     test = rag_units[~mask].reset_index(drop=True)
+    if "assessment_context" in rag_units:
+        def context_key(value):
+            return json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False)
+
+        holdout_contexts = set(test["assessment_context"].map(context_key))
+        duplicates = train["assessment_context"].map(context_key).isin(holdout_contexts)
+        if grouped:
+            duplicates = train["_group_id"].isin(train.loc[duplicates, "_group_id"])
+        if duplicates.any():
+            logger.warning("RAG: исключено %d train-единиц из групп с контекстом holdout",
+                           int(duplicates.sum()))
+            train = train.loc[~duplicates].reset_index(drop=True)
     if train.empty or test.empty:
         raise MonitoringContractError("Для calibration не удалось разделить эталон")
     return train, test

@@ -370,3 +370,23 @@ def test_refusing_hard_defects_cannot_pass_calibration(monkeypatch):
     assert metrics['holdout_units'] == 1000
     assert metrics['paired_units'] == 810
     assert metrics['admission_status'] == 'red'
+
+
+def test_split_excludes_training_groups_with_holdout_context():
+    units = pd.DataFrame({
+        '_group_id': [f'g{i}' for i in range(12)],
+        'assessment_score': [0.] * 6 + [1.] * 6,
+        'assessment_context': [{'text': str(i)} for i in range(12)],
+    })
+    original_train, original_test = assessor._split_units(units, ['assessment_score'], .5)
+    train_id = original_train.iloc[0]['_group_id']
+    test_id = original_test.iloc[0]['_group_id']
+    test_context = units.loc[units['_group_id'].eq(test_id), 'assessment_context'].iloc[0]
+    units.loc[units['_group_id'].eq(train_id), 'assessment_context'] = [test_context]
+    extra = units[units['_group_id'].eq(train_id)].copy()
+    extra.at[extra.index[0], 'assessment_context'] = {'text': 'Другой turn той же группы'}
+    units = pd.concat([units, extra], ignore_index=True)
+    train, test = assessor._split_units(units, ['assessment_score'], .5)
+    assert test['_group_id'].tolist() == original_test['_group_id'].tolist()
+    assert train_id not in train['_group_id'].tolist()
+    assert not {str(x) for x in train.assessment_context} & {str(x) for x in test.assessment_context}
