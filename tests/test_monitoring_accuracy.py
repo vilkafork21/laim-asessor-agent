@@ -351,3 +351,22 @@ def test_split_without_groups_is_stratified() -> None:
 
     assert (test["assessment_score"] == 0.0).sum() >= 1
     assert len(train) + len(test) == len(units)
+
+
+def test_refusing_hard_defects_cannot_pass_calibration(monkeypatch):
+    units = pd.DataFrame({'assessment_score': [0.0] * 400 + [1.0] * 1600})
+
+    def refuse_defects(_judge, test, _sources, _count):
+        scores = test['assessment_score'].copy()
+        scores.loc[scores.eq(0).head(190).index] = float('nan')
+        return pd.DataFrame({'agent_assessment_score': scores})
+
+    # Фиксируем holdout: 200 дефектов и 800 исправных, отказы на 190 дефектах.
+    holdout = pd.DataFrame({'assessment_score': [0.0] * 200 + [1.0] * 800})
+    monkeypatch.setattr(assessor, '_split_units', lambda *_: (units, holdout))
+    metrics, _, _, _ = _calibrate(monkeypatch, units, refuse_defects)
+    assert metrics['cohen_kappa'] == metrics['krippendorff_alpha'] == 1
+    assert metrics['defect_recall'] == 0.05
+    assert metrics['holdout_units'] == 1000
+    assert metrics['paired_units'] == 810
+    assert metrics['admission_status'] == 'red'

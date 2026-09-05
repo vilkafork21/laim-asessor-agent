@@ -19,7 +19,7 @@ from langchain_gigachat.embeddings.gigachat import GigaChatEmbeddings
 from agent.asessor_agent import Asessor
 from agent.config import ModelsConfig
 from agent.sds_chat_model import SdsChatModel
-from agent.score_results import AnswersProcessor, ResultsScorer
+from agent.score_results import score_results
 from laim_monitoring import (
     MonitoringContractError,
     broadcast_scores,
@@ -218,14 +218,15 @@ def _labelled_reference_units(units: pd.DataFrame, source_ids: list[str]) -> pd.
 def _predict(asessor: Asessor, frame: pd.DataFrame, source_ids: list[str], count: int) -> pd.DataFrame:
     if count < 1:
         raise ValueError("num_assessors должен быть положительным")
-    processor = AnswersProcessor()
     frames = []
     for index in range(count):
         values = asyncio.run(asessor.run(frame))
-        parsed = processor.parse(
-            [value.model_dump() if hasattr(value, "model_dump") else value for value in values],
-            source_ids,
-        )
+        if len(values) != len(frame):
+            raise MonitoringContractError("Assessor: число ответов не совпадает с числом единиц")
+        parsed = pd.DataFrame([
+            value.model_dump() if hasattr(value, "model_dump") else (value or {})
+            for value in values
+        ]).reindex(columns=source_ids).add_prefix("agent_")
         if count > 1:
             parsed.columns = [
                 column.replace("agent_", f"agent_{index}_", 1)
@@ -347,58 +348,27 @@ def _calibrate(
         source_ids,
         num_assessors,
     )
-    # Отказ судьи (квота/сеть) — не неверный ответ: такие строки исключаются
-    # из калибровки, иначе каждый допущенный отказ занижает acc_auto как ноль.
-    answered = predictions[
-        [f"agent_{source_id}" for source_id in source_ids]
-    ].notna().any(axis=1)
-    if not answered.any():
-        raise MonitoringContractError(
-            "Calibration невозможна: судья не ответил ни на одну тестовую единицу"
-        )
-    if not answered.all():
-        logger.warning(
-            "calibration: судья не ответил на %d из %d единиц; acc_auto считается по отвеченным",
-            int((~answered).sum()), len(answered),
-        )
     labels = test[source_ids].reset_index(drop=True)
-    comparison = pd.concat(
-        [
-            predictions[answered].reset_index(drop=True),
-            labels[answered].reset_index(drop=True),
-        ],
-        axis=1,
-    )
-    score = ResultsScorer(AnswersProcessor()).score(
-        comparison, source_ids,
+    comparison = pd.concat([predictions.reset_index(drop=True), labels], axis=1)
+    score = score_results(
+        comparison, "assessment_score",
         defect_threshold=assessment_contract["evaluation"]["defect_threshold"],
         higher_is_better=assessment_contract["evaluation"]["higher_is_better"],
     )
-    labels_used = labels[answered].astype(float)
+    if score["invalid_share"]:
+        logger.warning("calibration: судья ответил на %s из %s единиц",
+                       score["paired_units"], score["holdout_units"])
     # Смещение судьи считается на шкале ключевой метрики: оценка единицы по
     # контракту у судьи против той же оценки по человеческой разметке.
     judge_scores = _score_predictions(test, predictions, assessment_contract)
     human_scores = test["assessment_score"].astype(float)
-    paired = answered.to_numpy() & judge_scores.notna().to_numpy() & human_scores.notna().to_numpy()
+    paired = judge_scores.notna().to_numpy() & human_scores.notna().to_numpy()
     bias = judge_bias(
         judge_scores[paired].astype(float).tolist(),
         human_scores[paired].astype(float).tolist(),
     )
     metrics: dict[str, object] = {
-        "acc_auto": float(score["mean_accuracy"]["Mean accuracy"]),
-        "holdout_units": int(len(labels_used)),
-        "holdout_defect_units": int(
-            (labels_used[source_ids[0]] < assessment_contract["evaluation"]["defect_threshold"]).sum()
-            if assessment_contract["evaluation"]["higher_is_better"] else
-            (labels_used[source_ids[0]] > assessment_contract["evaluation"]["defect_threshold"]).sum()
-        ),
-        "invalid_share": float((~answered).sum() / len(answered)),
-        "baseline_mode_accuracy": float(score["mean_accuracy"]["Mean mode"]),
-        "cohen_kappa": score["cohen_kappa"],
-        "krippendorff_alpha": score["krippendorff_alpha"],
-        "spearman_correlation": float(score["mean_correlation"]),
-        "defect_recall": float(score["defect_recall"]),
-        "defect_precision": float(score["defect_precision"]),
+        **score,
         "bias_mean": None if bias is None else bias["mean"],
         "bias_ci_lower": None if bias is None else bias["ci_lower"],
         "bias_ci_upper": None if bias is None else bias["ci_upper"],
@@ -409,9 +379,9 @@ def _calibrate(
     metrics["admission_reason_code"] = admission.reason_code
     metrics["admission_reason"] = admission.reason
     logger.info(
-        "calibration: acc_auto=%.3f, baseline по моде=%.3f, каппа Коэна=%s, "
-        "альфа Криппендорфа=%s, корреляция Спирмана=%.3f, полнота на дефектах=%.3f, "
-        "точность на дефектах=%.3f, смещение судьи=%s, допуск=%s (%s)",
+        "calibration: acc_auto=%s, baseline по моде=%s, каппа Коэна=%s, "
+        "альфа Криппендорфа=%s, корреляция Спирмана=%s, полнота на дефектах=%s, "
+        "точность на дефектах=%s, смещение судьи=%s, допуск=%s (%s)",
         metrics["acc_auto"], metrics["baseline_mode_accuracy"], metrics["cohen_kappa"],
         metrics["krippendorff_alpha"], metrics["spearman_correlation"],
         metrics["defect_recall"], metrics["defect_precision"], metrics["bias_mean"],
