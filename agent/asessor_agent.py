@@ -468,7 +468,7 @@ class Asessor:
                     ]
                 )
                 if self.domain_retriever
-                else "Ориентируйся на собственные знания",
+                else "",
                 "user_input": user_input,
                 "instructions": self.instruction,
                 "answer_columns_values_set": self.answer_columns_values_set,

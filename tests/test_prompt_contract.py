@@ -80,3 +80,19 @@ def test_unknown_evidence_requires_abstention_instead_of_automatic_pass():
     assert '"not_assessable"' in SYSTEM_PROMPT
     assert "Отсутствие сведений не доказывает ни успех, ни дефект" in SYSTEM_PROMPT
     assert "в бинарной шкале — большее" not in SYSTEM_PROMPT
+
+
+def test_missing_domain_source_does_not_request_guessed_facts():
+    from types import SimpleNamespace
+    from agent.asessor_agent import Asessor
+
+    judge = SimpleNamespace(
+        _init_examples_rag=lambda: None, domain_rag_path=None, domain_retriever=None,
+        examples_retriever=SimpleNamespace(hybrid_search=lambda **_: []),
+        defect_retriever=None, defect_examples=[], _lowest_values={},
+        instruction='Проверяй утверждения по представленным фактам.',
+        answer_columns_values_set={'assessment_score': [0, 1]},
+    )
+    Asessor._init_rag(judge)
+    inputs = judge.retrieval_chain.invoke('{}')
+    assert inputs['domain_knowledge'] == ''
