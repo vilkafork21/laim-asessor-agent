@@ -16,6 +16,7 @@ import numpy as np
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 from rank_bm25 import BM25Okapi
+from scipy.stats import rankdata
 from retriever.doc_loaders import load_documents_from_directory
 
 # =====================================================
@@ -72,9 +73,8 @@ class EnhancedBM25(BM25Okapi):
         Преобразует скоры в ранги и применяет формулу RRF.
         Устойчива к выбросам, так как зависит только от порядка (ранга), а не величины скора.
         """
-        # Получаем ранги (1 - максимальный скор, N - минимальный)
-        # Метод 'ordinal' используется для корректной обработки одинаковых значений
-        ranks = len(scores) + 1 - np.argsort(scores, kind="stable")
+        # Одинаковая релевантность не должна зависеть от позиции документа в корзине.
+        ranks = rankdata(-np.asarray(scores), method="average")
 
         # Формула RRF: 1 / (k + rank)
         rrf_scores = 1.0 / (k + ranks)
@@ -198,8 +198,7 @@ class QuestionAnswerRetriever(BaseRetriever):
         self.logger.info("Инициализация QuestionAnswerRetriever")
         self.logger.info(f"Количество примеров: {len(examples)}")
 
-        # Полный page_content уходит в централизованный BoundedEmbeddings;
-        # metadata ограничивает только размер few-shot контекста в промпте.
+        # Оценка относится ко всему примеру, включая поздние реплики диалога.
         for item in examples:
             question = item["question"]
             answer = item["answer"]
@@ -207,7 +206,7 @@ class QuestionAnswerRetriever(BaseRetriever):
                 page_content=question,
                 metadata={
                     "answer": answer,
-                    "question": question[:4000],
+                    "question": question,
                 },
             )
             self._documents.append(doc)
