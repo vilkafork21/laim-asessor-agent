@@ -93,53 +93,15 @@ def test_accuracy_is_assessed_from_reference_main_metric() -> None:
     ]
 
 
-def test_monitoring_accuracy_without_prediction_column_is_judged(monkeypatch) -> None:
-    """Трейсы не несут колонок размеченной корзины: судья оценивает output_answer."""
-    captured: dict[str, object] = {}
-
-    def fake_calibrate(rag_units, source_ids, *args, **kwargs):
-        test_units = rag_units.iloc[:2].reset_index(drop=True)
-        predictions = pd.DataFrame({"agent_assessment_score": [1.0, 0.0]})
-        return {"acc_auto": 0.875}, test_units, predictions, object()
-
-    def fake_predict(_judge, frame, source_ids, _count):
-        captured["monitoring_context"] = frame.loc[0, "assessment_context"]
-        return pd.DataFrame({"agent_assessment_score": [1.0, 0.0]})
-
-    monkeypatch.setattr(
-        assessor,
-        "ModelsConfig",
-        lambda **_kwargs: SimpleNamespace(contour_configs={}),
-    )
-    monkeypatch.setattr(assessor, "GigaChatEmbeddings", lambda **_kwargs: object())
-    monkeypatch.setattr(
-        assessor, "_build_judge_model", lambda *_args: (object(), "judge")
-    )
-    monkeypatch.setattr(assessor, "_build_assessor", lambda *_args: object())
-    monkeypatch.setattr(assessor, "_calibrate", fake_calibrate)
-    monkeypatch.setattr(assessor, "_predict", fake_predict)
-    monkeypatch.setattr(
-        assessor,
-        "_load_instruction",
-        lambda _value: "Оцените корректность выбранного маршрута.",
-    )
-
+def test_monitoring_accuracy_without_prediction_column_is_not_computable() -> None:
     result = assessor.main(
-        reference_umr=_reference(),
-        monitoring_metric=_metric(),
-        assessor_instruction=Path("instruction.txt"),
-        monitoring_umr=_monitoring().drop(columns=["class"]),
-        stage="combined",
+        reference_umr=_reference(), monitoring_metric=_metric(),
+        monitoring_umr=_monitoring().drop(columns=["class"]), stage="combined",
     )
 
-    monitoring_context = captured["monitoring_context"]
-    assert isinstance(monitoring_context, dict)
-    assert monitoring_context["current_turn"]["output_answer"] == "answer-1"
-    assessment_result = result["assessment_result"]
-    assert isinstance(assessment_result, dict)
-    assert assessment_result["status"] == "computed"
-    assert assessment_result["scored_units"] == 2
-    assert result["scored_data"]["main_metric"].tolist() == [1.0, 0.0]
+    assert result["assessment_result"]["status"] == "not_computable"
+    assert result["assessment_result"]["reason_code"] == "missing_prediction"
+    assert result["scored_data"]["main_metric"].isna().all()
 
 
 def test_monitoring_accuracy_does_not_require_gt(monkeypatch) -> None:

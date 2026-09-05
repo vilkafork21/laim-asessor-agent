@@ -602,6 +602,23 @@ def main(
         }
     if stage in {"monitoring", "combined"}:
         monitoring_umr = normalize_umr(monitoring_umr, contract)
+        if contract["scoring"]["method"] == "accuracy":
+            column = _source_by_role(contract, "prediction")["column_name"]
+            values = monitoring_umr.get(column, pd.Series(None, index=monitoring_umr.index))
+            missing = values.isna() | values.astype(str).str.strip().eq("")
+            if missing.any():
+                reason = (
+                    f"UMR: prediction {column!r} недоступен в {int(missing.sum())} "
+                    f"из {len(monitoring_umr)} строк; сопоставимая accuracy не вычисляется"
+                )
+                logger.warning(reason)
+                return {
+                    "scored_data": _unavailable_scored_data(monitoring_umr),
+                    "acc_auto": None,
+                    "assessment_result": _unavailable_result({
+                        **contract, "reason_code": "missing_prediction", "reason": reason,
+                    }),
+                }
 
     assessment_contract = _assessment_contract(contract)
     # Packed dialogue разворачивается до построения units: broadcast_scores
@@ -670,18 +687,7 @@ def main(
         )
 
     if stage in {"monitoring", "combined"} and monitoring_umr is not None:
-        # Трейсы не несут колонок размеченной корзины: без наблюдаемого
-        # prediction судья оценивает сам output_answer, а не отказывается.
-        monitoring_assessment = monitoring_umr
-        if contract["scoring"]["method"] == "accuracy":
-            prediction = _source_by_role(contract, "prediction")
-            if _source_missing(monitoring_umr, prediction):
-                print(
-                    f"monitoring: prediction {prediction['column_name']!r} "
-                    "недоступен в UMR, судья оценивает output_answer"
-                )
-            else:
-                monitoring_assessment = _assessment_frame(monitoring_umr, contract)
+        monitoring_assessment = _assessment_frame(monitoring_umr, contract)
         monitoring_units = _assessor_units(
             monitoring_assessment,
             assessment_contract,
