@@ -419,3 +419,8 @@ ZIP модуля — файлы из `sourceFiles` плюс `descriptor.json` и
 - **Доменный RAG** — чанки документов из `domain_rag_files_zip` в промпте.
 - **Structured output** — ответ судьи строго по Pydantic-схеме со шкалой из
   данных эталона.
+
+Пустой мониторинговый срез даёт `not_computable/no_monitoring_units` до
+нормализации и создания моделей. Если судья не оценил ни одной единицы,
+результат всегда `not_computable/no_scored_units`, даже при
+`max_invalid_share=1`: нулевое покрытие не является вычисленной метрикой.

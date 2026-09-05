@@ -486,7 +486,12 @@ def _assessment_result(
         "refused_units": refused,
         "refused_share": refused_share,
     }
-    if refused_share > max_invalid_share:
+    if scored == 0:
+        result.update(
+            status="not_computable", reason_code="no_scored_units",
+            reason="Нет ни одной оценённой единицы",
+        )
+    elif refused_share > max_invalid_share:
         # Переизбыток отказов — отдельный статус, а не падение ноды и не
         # молчаливое сужение выборки.
         result["status"] = "not_computable"
@@ -601,6 +606,17 @@ def main(
             "assessment_result": _unavailable_result(contract),
         }
     if stage in {"monitoring", "combined"}:
+        if monitoring_umr.empty:
+            reason = "Во входной выборке нет единиц мониторинга"
+            logger.warning(reason)
+            result = _unavailable_result({
+                **contract, "reason_code": "no_monitoring_units", "reason": reason,
+            })
+            result["total_units"] = 0
+            return {
+                "scored_data": _unavailable_scored_data(monitoring_umr),
+                "acc_auto": None, "assessment_result": result,
+            }
         monitoring_umr = normalize_umr(monitoring_umr, contract)
         if contract["scoring"]["method"] == "accuracy":
             column = _source_by_role(contract, "prediction")["column_name"]
