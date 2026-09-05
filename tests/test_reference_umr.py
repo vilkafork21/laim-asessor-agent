@@ -125,3 +125,41 @@ def test_session_identity_is_case_sensitive():
         "main_metric": [1.0, 1.0],
     })
     assert len(unitize(frame, _contract("dialogue"))) == 2
+
+
+@pytest.mark.parametrize('require_sources', [True, False])
+def test_final_human_score_keeps_declared_observed_route(require_sources):
+    import main as assessor
+
+    contract = reviewed_metric(_contract('qa'), prediction_observable='route_label')
+    frame = pd.DataFrame({
+        'query_id': ['q1', 'q2'], 'input_query': ['Запрос', 'Запрос'],
+        'output_answer': ['Ответ', 'Ответ'], 'scenario': ['right-route', 'wrong-route'],
+        'input_query_count': [1, 1], 'main_metric': [1., 0.], 'score_metric': [1., 0.],
+    })
+    units = assessor._assessor_units(frame, contract, require_sources=require_sources)
+    contexts = units.assessment_context.tolist()
+    assert [c['observations'][0]['observed_prediction'] for c in contexts] == ['right-route', 'wrong-route']
+    assert contexts[0] != contexts[1]
+
+
+@pytest.mark.parametrize('value', [None, '', '   ', float('nan')])
+def test_declared_route_cannot_disappear_from_judge_context(value):
+    import main as assessor
+
+    contract = reviewed_metric(_contract('qa'), prediction_observable='route_label')
+    frame = pd.DataFrame({'query_id': ['q1'], 'input_query': ['Запрос'],
+                          'output_answer': ['Ответ'], 'scenario': [value], 'input_query_count': [1]})
+    with pytest.raises(MonitoringContractError, match='scenario'):
+        assessor._assessor_units(frame, contract, require_sources=False)
+
+
+def test_dialogue_cannot_replace_missing_late_route_with_first_route():
+    import main as assessor
+
+    contract = reviewed_metric(_contract('dialogue'), prediction_observable='route_label')
+    frame = pd.DataFrame({'session_id': ['s', 's'], 'query_id': ['q1', 'q2'],
+                          'input_query': ['Вопрос', 'Уточнение'], 'output_answer': ['Ответ', 'Продолжение'],
+                          'scenario': ['first-route', None], 'input_query_count': [1, 1]})
+    with pytest.raises(MonitoringContractError, match='scenario'):
+        assessor._assessor_units(frame, contract, require_sources=False)

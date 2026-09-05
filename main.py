@@ -101,6 +101,9 @@ def _assessor_units(frame: pd.DataFrame, contract: dict, *, require_sources: boo
     required = contract["evaluation"]["required_evidence"]
     prediction = next((source["column_name"] for source in contract["scoring"]["sources"]
                        if source["role"] == "prediction"), None)
+    if prediction is None:
+        prediction = {"route_label": "scenario", "output_answer": "output_answer"}.get(
+            contract["evaluation"]["prediction_observable"])
     for index, row in units.iterrows():
         first = frame.iloc[row["_row_positions"][0]]
         session = first.get("session_id")
@@ -120,7 +123,10 @@ def _assessor_units(frame: pd.DataFrame, contract: dict, *, require_sources: boo
                 raise MonitoringContractError(f"Недоступны обязательные свидетельства: {missing}")
             item = {"evidence": {name: evidence[name] for name in required}}
             if prediction:
-                item["observed_prediction"] = observation.get(prediction)
+                observed = observation.get(prediction)
+                if pd.isna(observed) or not str(observed).strip():
+                    raise MonitoringContractError(f"Недоступна наблюдаемая величина {prediction}: {observed!r}")
+                item["observed_prediction"] = observed
             observations.append(item)
         context["observations"] = observations
         units.at[index, "assessment_context"] = context
