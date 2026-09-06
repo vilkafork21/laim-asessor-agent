@@ -39,12 +39,13 @@ def admit(
     holdout = int(metrics["holdout_units"])
     defects = int(metrics["holdout_defect_units"])
     invalid_share = float(metrics["invalid_share"])
-    recall = float(metrics["defect_recall"])
+    recall = metrics["defect_recall"]
     kappa = metrics.get("cohen_kappa")
-    if holdout < min_holdout_units:
+    paired = int(metrics.get("paired_units", holdout))
+    if paired < min_holdout_units:
         return Admission(
             "not_assessed", "holdout_too_small",
-            f"holdout {holdout} единиц меньше минимума {min_holdout_units}",
+            f"holdout: {paired} сопоставленных единиц из {holdout}, минимум {min_holdout_units}",
         )
     if defects < min_holdout_defect_units:
         return Admission(
@@ -58,6 +59,9 @@ def admit(
             f"доля невалидных ответов судьи {invalid_share:.2f} выше допустимой "
             f"{max_invalid_share:.2f}",
         )
+    if recall is None:
+        return Admission("not_assessed", "critical_class_underrepresented",
+                         "Полнота на дефектах не вычислима: нет человеческих дефектов")
     weak_recall = recall < min_defect_recall
     weak_kappa = kappa is None or float(kappa) < min_kappa
     kappa_text = "не вычислима" if kappa is None else f"{float(kappa):.2f}"
@@ -67,7 +71,12 @@ def admit(
             f"полнота на дефектах {recall:.2f} ниже {min_defect_recall:.2f} и каппа "
             f"{kappa_text} ниже {min_kappa:.2f}: судья не лучше тривиальной оценки",
         )
-    if weak_recall or weak_kappa:
+    if weak_recall:
+        return Admission(
+            "red", "insufficient_defect_recall",
+            f"полнота на всех человеческих дефектах {recall:.2f} ниже {min_defect_recall:.2f}",
+        )
+    if weak_kappa:
         return Admission(
             "amber", "weak_agreement",
             f"полнота на дефектах {recall:.2f} (минимум {min_defect_recall:.2f}), каппа "

@@ -142,13 +142,13 @@ def test_lowest_allowed_values_only_for_numeric_scales():
     assert _lowest_allowed_values({"route": {"rag", "deposelector"}}) == {}
 
 
-def test_answer_needs_review_when_any_criterion_is_lowest():
-    from agent.asessor_agent import _needs_review
+def test_answer_is_lowest_score_when_any_criterion_is_lowest():
+    from agent.asessor_agent import _is_lowest_score
 
     lowest = {"score": 0.0}
-    assert _needs_review({"score": 0.0}, lowest) is True
-    assert _needs_review({"score": 1.0}, lowest) is False
-    assert _needs_review({}, lowest) is False
+    assert _is_lowest_score({"score": 0.0}, lowest) is True
+    assert _is_lowest_score({"score": 1.0}, lowest) is False
+    assert _is_lowest_score({}, lowest) is False
 
 
 def test_process_with_rate_limit_retrieves_once_and_passes_prompt_to_judge():

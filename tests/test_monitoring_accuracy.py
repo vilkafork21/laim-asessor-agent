@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+from tests.measurement_fixture import reviewed_metric
+
 from pathlib import Path
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 
 import main as assessor
 
 
 def _metric() -> dict[str, object]:
-    return {
+    return reviewed_metric({
         "contract_version": "laim-monitoring-metric.v2",
         "umr_version": "laim-umr.v2",
         "status": "computed",
@@ -48,7 +51,7 @@ def _metric() -> dict[str, object]:
             "recomputed_value": 0.94,
         },
         "primary_validation": {"affects_monitoring": False},
-    }
+    })
 
 
 def _reference() -> pd.DataFrame:
@@ -62,7 +65,7 @@ def _reference() -> pd.DataFrame:
             "main_metric": [1.0, 0.0, 1.0, 1.0],
             "input_query_count": [1, 1, 1, 1],
         }
-    )
+    ).assign(definition_id=_metric()["definition_id"], evaluation_ready=True, dataset_role="reference")
 
 
 def _monitoring() -> pd.DataFrame:
@@ -75,71 +78,26 @@ def _monitoring() -> pd.DataFrame:
             "class": ["route-a", "route-b"],
             "input_query_count": [1, 1],
         }
-    )
+    ).assign(definition_id=_metric()["definition_id"], evaluation_ready=True, dataset_role="monitoring")
 
 
 def test_accuracy_is_assessed_from_reference_main_metric() -> None:
-    contract = assessor._assessment_contract(_metric())
+    contract = _metric()
 
-    assert contract["scoring"]["method"] == "identity"
-    assert contract["scoring"]["sources"] == [
-        {
-            "source_id": "assessment_score",
-            "column_name": "main_metric",
-            "role": "final_score",
-            "normalization": "numeric",
-            "polarity": "direct",
-        }
-    ]
+    units = assessor._assessor_units(_reference(), contract, require_sources=True)
+    assert contract["scoring"]["method"] == "accuracy"
+    assert units["assessment_score"].tolist() == _reference()["main_metric"].tolist()
 
 
-def test_monitoring_accuracy_without_prediction_column_is_judged(monkeypatch) -> None:
-    """Трейсы не несут колонок размеченной корзины: судья оценивает output_answer."""
-    captured: dict[str, object] = {}
-
-    def fake_calibrate(rag_units, source_ids, *args, **kwargs):
-        test_units = rag_units.iloc[:2].reset_index(drop=True)
-        predictions = pd.DataFrame({"agent_assessment_score": [1.0, 0.0]})
-        return {"acc_auto": 0.875}, test_units, predictions
-
-    def fake_predict(_judge, frame, source_ids, _count):
-        captured["monitoring_context"] = frame.loc[0, "assessment_context"]
-        return pd.DataFrame({"agent_assessment_score": [1.0, 0.0]})
-
-    monkeypatch.setattr(
-        assessor,
-        "ModelsConfig",
-        lambda **_kwargs: SimpleNamespace(contour_configs={}),
-    )
-    monkeypatch.setattr(assessor, "GigaChatEmbeddings", lambda **_kwargs: object())
-    monkeypatch.setattr(
-        assessor, "_build_judge_model", lambda *_args: (object(), "judge")
-    )
-    monkeypatch.setattr(assessor, "_build_assessor", lambda *_args: object())
-    monkeypatch.setattr(assessor, "_calibrate", fake_calibrate)
-    monkeypatch.setattr(assessor, "_predict", fake_predict)
-    monkeypatch.setattr(
-        assessor,
-        "_load_instruction",
-        lambda _value: "Оцените корректность выбранного маршрута.",
-    )
-
+def test_monitoring_accuracy_without_prediction_column_is_not_computable() -> None:
     result = assessor.main(
-        reference_umr=_reference(),
-        monitoring_metric=_metric(),
-        assessor_instruction=Path("instruction.txt"),
-        monitoring_umr=_monitoring().drop(columns=["class"]),
-        stage="combined",
+        reference_umr=_reference(), monitoring_metric=_metric(),
+        monitoring_umr=_monitoring().drop(columns=["class"]), stage="combined",
     )
 
-    monitoring_context = captured["monitoring_context"]
-    assert isinstance(monitoring_context, dict)
-    assert monitoring_context["current_turn"]["output_answer"] == "answer-1"
-    assessment_result = result["assessment_result"]
-    assert isinstance(assessment_result, dict)
-    assert assessment_result["status"] == "computed"
-    assert assessment_result["scored_units"] == 2
-    assert result["scored_data"]["main_metric"].tolist() == [1.0, 0.0]
+    assert result["assessment_result"]["status"] == "not_computable"
+    assert result["assessment_result"]["reason_code"] == "missing_prediction"
+    assert result["scored_data"]["main_metric"].isna().all()
 
 
 def test_monitoring_accuracy_does_not_require_gt(monkeypatch) -> None:
@@ -149,7 +107,7 @@ def test_monitoring_accuracy_does_not_require_gt(monkeypatch) -> None:
         captured["source_ids"] = source_ids
         test_units = rag_units.iloc[:2].reset_index(drop=True)
         predictions = pd.DataFrame({"agent_assessment_score": [1.0, 0.0]})
-        return {"acc_auto": 0.875}, test_units, predictions
+        return {"acc_auto": 0.875}, test_units, predictions, object()
 
     def fake_predict(_judge, frame, source_ids, _count):
         captured["monitoring_columns"] = list(frame.columns)
@@ -169,16 +127,11 @@ def test_monitoring_accuracy_does_not_require_gt(monkeypatch) -> None:
     monkeypatch.setattr(assessor, "_build_assessor", lambda *_args: object())
     monkeypatch.setattr(assessor, "_calibrate", fake_calibrate)
     monkeypatch.setattr(assessor, "_predict", fake_predict)
-    monkeypatch.setattr(
-        assessor,
-        "_load_instruction",
-        lambda _value: "Оцените корректность выбранного маршрута.",
-    )
 
     result = assessor.main(
         reference_umr=_reference(),
         monitoring_metric=_metric(),
-        assessor_instruction=Path("instruction.txt"),
+
         monitoring_umr=_monitoring(),
         stage="combined",
     )
@@ -186,7 +139,8 @@ def test_monitoring_accuracy_does_not_require_gt(monkeypatch) -> None:
     assert captured["source_ids"] == ["assessment_score"]
     monitoring_context = captured["monitoring_context"]
     assert isinstance(monitoring_context, dict)
-    assert monitoring_context["current_turn"]["output_answer"] == "route-a"
+    assert monitoring_context["current_turn"]["output_answer"] == "answer-1"
+    assert monitoring_context["observations"][0]["observed_prediction"] == "route-a"
     assert "GT" not in _monitoring()
     assert result["acc_auto"] == 0.875
     assessment_result = result["assessment_result"]
@@ -223,7 +177,7 @@ def _calibrate(monkeypatch, rag_units, fake_predict, **overrides):
         0.5,
         1,
         False,
-        assessment_contract=assessor._assessment_contract(_metric()),
+        assessment_contract=_metric(),
         admission_settings={**_ADMISSION, **overrides},
     )
 
@@ -240,7 +194,7 @@ def test_calibrate_logs_agreement_metrics(monkeypatch, caplog) -> None:
         )
 
     with caplog.at_level(logging.INFO):
-        metrics, _test, _predictions = _calibrate(monkeypatch, rag_units, fake_predict)
+        metrics, _test, _predictions, _judge = _calibrate(monkeypatch, rag_units, fake_predict)
 
     assert metrics["acc_auto"] == 1.0
     assert metrics["cohen_kappa"] == 1.0
@@ -264,7 +218,7 @@ def test_calibrate_measures_judge_bias_and_admission(monkeypatch) -> None:
         scores[0] = 0.0  # одну верную единицу судья счёл дефектом
         return pd.DataFrame({"agent_assessment_score": scores})
 
-    metrics, _test, _predictions = _calibrate(monkeypatch, rag_units, stricter_judge)
+    metrics, _test, _predictions, _judge = _calibrate(monkeypatch, rag_units, stricter_judge)
 
     assert metrics["bias_units"] == metrics["holdout_units"]
     assert metrics["bias_mean"] < 0.0
@@ -283,7 +237,7 @@ def test_monitoring_refusals_are_counted(monkeypatch) -> None:
 
     def fake_calibrate(rag_units, source_ids, *args, **kwargs):
         test_units = rag_units.iloc[:2].reset_index(drop=True)
-        return {"acc_auto": 0.875}, test_units, pd.DataFrame({"agent_assessment_score": [1.0, 0.0]})
+        return {"acc_auto": 0.875}, test_units, pd.DataFrame({"agent_assessment_score": [1.0, 0.0]}), object()
 
     def refusing_predict(_judge, frame, source_ids, _count):
         return pd.DataFrame({"agent_assessment_score": [1.0, None]})
@@ -296,11 +250,10 @@ def test_monitoring_refusals_are_counted(monkeypatch) -> None:
     monkeypatch.setattr(assessor, "_build_assessor", lambda *_args: object())
     monkeypatch.setattr(assessor, "_calibrate", fake_calibrate)
     monkeypatch.setattr(assessor, "_predict", refusing_predict)
-    monkeypatch.setattr(assessor, "_load_instruction", lambda _value: "Оцените ответ.")
     kwargs = dict(
         reference_umr=_reference(),
         monitoring_metric=_metric(),
-        assessor_instruction=Path("instruction.txt"),
+
         monitoring_umr=_monitoring(),
         stage="combined",
     )
@@ -348,7 +301,7 @@ def test_calibration_metrics_reach_assessment_result(monkeypatch) -> None:
 
     def fake_calibrate(rag_units, source_ids, *args, **kwargs):
         test_units = rag_units.iloc[:2].reset_index(drop=True)
-        return metrics, test_units, pd.DataFrame({"agent_assessment_score": [1.0, 0.0]})
+        return metrics, test_units, pd.DataFrame({"agent_assessment_score": [1.0, 0.0]}), object()
 
     def fake_predict(_judge, frame, source_ids, _count):
         return pd.DataFrame({"agent_assessment_score": [1.0, 0.0]})
@@ -365,16 +318,11 @@ def test_calibration_metrics_reach_assessment_result(monkeypatch) -> None:
     monkeypatch.setattr(assessor, "_build_assessor", lambda *_args: object())
     monkeypatch.setattr(assessor, "_calibrate", fake_calibrate)
     monkeypatch.setattr(assessor, "_predict", fake_predict)
-    monkeypatch.setattr(
-        assessor,
-        "_load_instruction",
-        lambda _value: "Оцените корректность выбранного маршрута.",
-    )
 
     result = assessor.main(
         reference_umr=_reference(),
         monitoring_metric=_metric(),
-        assessor_instruction=Path("instruction.txt"),
+
         monitoring_umr=_monitoring(),
         stage="combined",
     )
@@ -404,3 +352,93 @@ def test_split_without_groups_is_stratified() -> None:
 
     assert (test["assessment_score"] == 0.0).sum() >= 1
     assert len(train) + len(test) == len(units)
+
+
+def test_refusing_hard_defects_cannot_pass_calibration(monkeypatch):
+    units = pd.DataFrame({'assessment_score': [0.0] * 400 + [1.0] * 1600})
+
+    def refuse_defects(_judge, test, _sources, _count):
+        scores = test['assessment_score'].copy()
+        scores.loc[scores.eq(0).head(190).index] = float('nan')
+        return pd.DataFrame({'agent_assessment_score': scores})
+
+    # Фиксируем holdout: 200 дефектов и 800 исправных, отказы на 190 дефектах.
+    holdout = pd.DataFrame({'assessment_score': [0.0] * 200 + [1.0] * 800})
+    monkeypatch.setattr(assessor, '_split_units', lambda *_: (units, holdout))
+    metrics, _, _, _ = _calibrate(monkeypatch, units, refuse_defects)
+    assert metrics['cohen_kappa'] == metrics['krippendorff_alpha'] == 1
+    assert metrics['defect_recall'] == 0.05
+    assert metrics['holdout_units'] == 1000
+    assert metrics['paired_units'] == 810
+    assert metrics['admission_status'] == 'red'
+
+
+def test_split_excludes_training_groups_with_holdout_context():
+    units = pd.DataFrame({
+        '_group_id': [f'g{i}' for i in range(12)],
+        'assessment_score': [0.] * 6 + [1.] * 6,
+        'assessment_context': [{'text': str(i)} for i in range(12)],
+    })
+    original_train, original_test = assessor._split_units(units, ['assessment_score'], .5)
+    train_id = original_train.iloc[0]['_group_id']
+    test_id = original_test.iloc[0]['_group_id']
+    test_context = units.loc[units['_group_id'].eq(test_id), 'assessment_context'].iloc[0]
+    units.loc[units['_group_id'].eq(train_id), 'assessment_context'] = [test_context]
+    extra = units[units['_group_id'].eq(train_id)].copy()
+    extra.at[extra.index[0], 'assessment_context'] = {'text': 'Другой turn той же группы'}
+    units = pd.concat([units, extra], ignore_index=True)
+    train, test = assessor._split_units(units, ['assessment_score'], .5)
+    assert test['_group_id'].tolist() == original_test['_group_id'].tolist()
+    assert train_id not in train['_group_id'].tolist()
+    assert not {str(x) for x in train.assessment_context} & {str(x) for x in test.assessment_context}
+
+
+@pytest.mark.parametrize('copies', [1, 20])
+def test_duplicate_holdout_tasks_cannot_manufacture_admission(monkeypatch, copies):
+    holdout = pd.DataFrame({
+        'assessment_context': [{'text': 'плохой ответ'}, {'text': 'хороший ответ'}] * copies,
+        'assessment_score': [0., 1.] * copies,
+        '_group_id': [f'g{i}' for i in range(2 * copies)],
+    })
+    monkeypatch.setattr(assessor, '_split_units', lambda *_: (holdout, holdout))
+    seen = []
+
+    def predict(_judge, test, _sources, _count):
+        seen.append(len(test))
+        return pd.DataFrame({'agent_assessment_score': test.assessment_score})
+
+    metrics, test, _, _ = _calibrate(monkeypatch, holdout, predict, min_holdout_units=20)
+    assert seen == [2]
+    assert len(test) == metrics['holdout_units'] == 2
+    assert metrics['holdout_source_units'] == 2 * copies
+    assert metrics['admission_status'] == 'not_assessed'
+
+
+def test_conflicting_human_labels_for_same_context_block_before_llm(monkeypatch):
+    holdout = pd.DataFrame({'assessment_context': [{'text': 'один ответ'}] * 2,
+                            'assessment_score': [0., 1.]})
+    monkeypatch.setattr(assessor, '_split_units', lambda *_: (holdout, holdout))
+
+    def predict(*_):
+        pytest.fail('Противоречивая разметка не должна доходить до LLM')
+
+    with pytest.raises(assessor.MonitoringContractError, match='противоречив'):
+        _calibrate(monkeypatch, holdout, predict)
+
+
+@pytest.mark.parametrize('group_count', [2, 40])
+def test_many_turns_of_few_groups_do_not_meet_holdout_minimum(monkeypatch, group_count):
+    holdout = pd.DataFrame({
+        'assessment_context': [{'text': f'ответ {i}'} for i in range(40)],
+        'assessment_score': [0., 1.] * 20,
+        '_group_id': [f'g{i % group_count}' for i in range(40)],
+    })
+    monkeypatch.setattr(assessor, '_split_units', lambda *_: (holdout, holdout))
+
+    def predict(_judge, test, _sources, _count):
+        return pd.DataFrame({'agent_assessment_score': test.assessment_score})
+
+    metrics, _, _, _ = _calibrate(monkeypatch, holdout, predict, min_holdout_units=20)
+    assert metrics['holdout_units'] == 40
+    assert metrics['admission_support']['paired_units'] == group_count
+    assert metrics['admission_status'] == ('not_assessed' if group_count == 2 else 'green')

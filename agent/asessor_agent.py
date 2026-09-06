@@ -20,7 +20,6 @@ from agent.prompts import (
     EXAMPLES_SUMMARYZATION_PROMPT,
     INSTRUCTION_PROMPT,
     INSTRUCTION_SUMMARYZATION_PROMPT,
-    REVIEW_PROMPT,
     SYSTEM_PROMPT,
 )
 from langchain_core.output_parsers.json import JsonOutputParser
@@ -71,8 +70,8 @@ def _lowest_allowed_values(values_set: dict[str, set]) -> dict[str, float]:
     return lowest
 
 
-def _needs_review(answer: dict[str, object], lowest: dict[str, float]) -> bool:
-    """Оценка на нижней границе шкалы — кандидат на перепроверку."""
+def _is_lowest_score(answer: dict[str, object], lowest: dict[str, float]) -> bool:
+    """Принадлежит ли оценка нижней границе утверждённой шкалы."""
     for column, floor in lowest.items():
         if column not in answer:
             continue
@@ -90,7 +89,7 @@ def _is_defect_example(example: dict, lowest: dict[str, float]) -> bool:
         answer = json.loads(example["answer"])
     except (TypeError, ValueError, KeyError):
         return False
-    return isinstance(answer, dict) and _needs_review(answer, lowest)
+    return isinstance(answer, dict) and _is_lowest_score(answer, lowest)
 
 
 def _defect_pool(
@@ -153,6 +152,7 @@ class Asessor:
         instruction_summarization: bool = True,
         instruction_structuring: bool = True,
         examples_summarization: bool = False,
+        *, score_values: list[float],
     ):
         self.logger = logging.getLogger(__name__)
         self.logger.info("Logging initialized")
@@ -160,6 +160,7 @@ class Asessor:
         self.llm = llm
         self.embedding_model = embedding_model
         self.dataset = dataset
+        self.score_values = score_values
         self.domain_rag_path = domain_rag_path
 
         self.instruction_structuring = instruction_structuring
@@ -240,25 +241,13 @@ class Asessor:
         self.agent_chain = self.printing_chain | self.llm.with_structured_output(
             self._output_model
         )
-        # Второй проход: сниженные оценки перепроверяет «адвокат» с чистым контекстом —
-        # без него судья штрафует за то, чего инструкция не запрещает.
-        self.review_printing_chain = RunnableLambda(
-            lambda user_input: {
-                "instructions": self.instruction,
-                "answer_columns_values_set": self.answer_columns_values_set,
-                "user_input": user_input,
-            }
-        ) | ChatPromptTemplate.from_messages([REVIEW_PROMPT])
-        self.review_chain = self.review_printing_chain | self.llm.with_structured_output(
-            self._output_model
-        )
         self.logger.debug("Asessor Agent chain: SUCCESS")
 
     def _create_output_model(self) -> None:
         """Создаёт Pydantic модель для structured output на основе dataset."""
         self._output_model = create_simple_output_model(
             answer_columns=self.answer_columns,
-            dataset=self.dataset,
+            score_values=self.score_values,
             model_name="AssessmentOutput",
         )
         self.logger.info(f"Создана Pydantic модель: {self._output_model.__name__}")
@@ -383,9 +372,7 @@ class Asessor:
         """
         answer_columns_values_set = {}
         for answer_column in self.answer_columns:
-            answer_columns_values_set[answer_column] = set(
-                self.dataset[answer_column].unique()
-            )
+            answer_columns_values_set[answer_column] = set(self.score_values)
         self.answer_columns_values_set = answer_columns_values_set
 
         self.logger.info(
@@ -481,7 +468,7 @@ class Asessor:
                     ]
                 )
                 if self.domain_retriever
-                else "Ориентируйся на собственные знания",
+                else "",
                 "user_input": user_input,
                 "instructions": self.instruction,
                 "answer_columns_values_set": self.answer_columns_values_set,
@@ -515,32 +502,4 @@ class Asessor:
             delay_seconds=delay_seconds,
         )
 
-        return await self._review_lowest(batch_inputs, results, delay_seconds)
-
-    async def _review_lowest(
-        self, batch_inputs: list[str], results: list, delay_seconds: int
-    ) -> list:
-        """Перепроверяет оценки на нижней границе шкалы вторым проходом."""
-        lowest = _lowest_allowed_values(self.answer_columns_values_set)
-        if not lowest:
-            return results
-        positions = [
-            index
-            for index, value in enumerate(results)
-            if value is not None
-            and _needs_review(
-                value.model_dump() if hasattr(value, "model_dump") else value, lowest
-            )
-        ]
-        if not positions:
-            return results
-        self.logger.info(f"Перепроверка сниженных оценок: {len(positions)} из {len(results)}")
-        reviewed = await process_with_rate_limit(
-            self.review_chain,
-            [batch_inputs[index] for index in positions],
-            delay_seconds=delay_seconds,
-        )
-        for index, verdict in zip(positions, reviewed):
-            if verdict is not None:
-                results[index] = verdict
         return results

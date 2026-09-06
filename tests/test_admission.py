@@ -37,7 +37,7 @@ def _metrics(**overrides):
         ({"invalid_share": 0.3}, "red", "judge_refusals"),
         ({"defect_recall": 0.2, "cohen_kappa": 0.05}, "red", "no_better_than_baseline"),
         ({"defect_recall": 0.2, "cohen_kappa": None}, "red", "no_better_than_baseline"),
-        ({"defect_recall": 0.2}, "amber", "weak_agreement"),
+        ({"defect_recall": 0.2}, "red", "insufficient_defect_recall"),
         ({"cohen_kappa": None}, "amber", "weak_agreement"),
         ({"cohen_kappa": 0.1}, "amber", "weak_agreement"),
     ],
