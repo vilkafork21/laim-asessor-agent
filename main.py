@@ -239,10 +239,6 @@ def _predict(asessor: Asessor, frame: pd.DataFrame, source_ids: list[str], count
     return combined
 
 
-def _score_predictions(units: pd.DataFrame, predictions: pd.DataFrame, plan: JudgePlan) -> pd.Series:
-    return score_judge_predictions(units, predictions, plan)
-
-
 def _broadcast_predictions(
     original: pd.DataFrame,
     units: pd.DataFrame,
@@ -535,7 +531,7 @@ def main(
             instruction_llm_preprocessing,
         )
         acc_auto = calibration_metrics["acc_auto"]
-        scores = _score_predictions(test_units, predictions, plan)
+        scores = score_judge_predictions(test_units, predictions, plan)
         scored_output = _broadcast_predictions(
             reference_umr,
             test_units,
@@ -574,7 +570,7 @@ def main(
             source_ids,
             num_assessors,
         )
-        scores = _score_predictions(monitoring_units, predictions, plan)
+        scores = score_judge_predictions(monitoring_units, predictions, plan)
         scored_output = _broadcast_predictions(
             monitoring_umr,
             monitoring_units,
