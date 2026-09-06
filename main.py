@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from copy import deepcopy
 import io
 import os
 from pathlib import Path
@@ -18,11 +17,19 @@ from agent.asessor_agent import Asessor
 from agent.config import ModelsConfig
 from agent.sds_chat_model import SdsChatModel
 from agent.score_results import AnswersProcessor, ResultsScorer
+from assessment_plan import (
+    CONTRACT_FORMULA,
+    JudgePlan,
+    build_judge_plan,
+    judge_instruction,
+    score_judge_predictions,
+    source_by_role,
+    source_observed,
+)
 from laim_monitoring import (
     MonitoringContractError,
     broadcast_scores,
     normalize_umr,
-    score_units,
     unitize,
     validate_monitoring_metric,
 )
@@ -100,48 +107,13 @@ def _domain_path(value) -> str | None:
     return extracted
 
 
-def _source_instruction(contract: dict) -> str:
-    lines = ["Поля ответа JSON и соответствующие критерии:"]
-    for source in contract["scoring"]["sources"]:
-        lines.append(
-            f"- {source['source_id']}: критерий из колонки {source['column_name']!r}, "
-            f"роль {source['role']}, polarity {source['polarity']}"
-        )
-    return "\n".join(lines)
-
-
-def _assessment_contract(contract: dict) -> dict:
-    """Предсказывать готовый score для accuracy и целого диалога."""
-    if (
-        contract["scoring"]["method"] != "accuracy"
-        and contract["assessment_mode"] != "dialogue"
-    ):
-        return contract
-    result = deepcopy(contract)
-    result["scoring"] = {
-        "method": "identity",
-        "sources": [
-            {
-                "source_id": "assessment_score",
-                "column_name": "main_metric",
-                "role": "final_score",
-                "normalization": "numeric",
-                "polarity": "direct",
-            }
-        ],
-        "missing_policy": contract["scoring"]["missing_policy"],
-        "majority_denominator": None,
-    }
-    return result
-
-
 def _assessment_frame(frame: pd.DataFrame, contract: dict) -> pd.DataFrame:
     """Выровнять контекст accuracy по prediction эталона и monitoring."""
     if contract["scoring"]["method"] != "accuracy":
         return frame
-    prediction = _source_by_role(contract, "prediction")
+    prediction = source_by_role(contract, "prediction")
     column = prediction["column_name"]
-    if _source_missing(frame, prediction):
+    if not source_observed(frame, prediction):
         raise MonitoringContractError(
             f"UMR не содержит наблюдаемое prediction: {column}"
         )
@@ -267,23 +239,8 @@ def _predict(asessor: Asessor, frame: pd.DataFrame, source_ids: list[str], count
     return combined
 
 
-def _score_predictions(units: pd.DataFrame, predictions: pd.DataFrame, contract: dict) -> pd.Series:
-    source_ids = [source["source_id"] for source in contract["scoring"]["sources"]]
-    values = units.copy()
-    for source_id in source_ids:
-        values[source_id] = predictions[f"agent_{source_id}"].tolist()
-    # Строка без единого поля ответа — это отказ судьи, а не пропуск в данных:
-    # missing_policy контракта (в том числе fail) к ней не применяется, единица
-    # просто исключается из оценки.
-    failed = (
-        predictions[[f"agent_{source_id}" for source_id in source_ids]]
-        .isna()
-        .all(axis=1)
-        .to_numpy()
-    )
-    scores = pd.Series(float("nan"), index=values.index, dtype="float64")
-    scores.iloc[~failed] = score_units(values.iloc[~failed], contract).to_numpy()
-    return scores
+def _score_predictions(units: pd.DataFrame, predictions: pd.DataFrame, plan: JudgePlan) -> pd.Series:
+    return score_judge_predictions(units, predictions, plan)
 
 
 def _broadcast_predictions(
@@ -403,22 +360,11 @@ def _calibrate(
     return metrics, test, predictions
 
 
-def _source_by_role(contract: dict, role: str) -> dict:
-    return next(source for source in contract["scoring"]["sources"] if source["role"] == role)
-
-
-def _source_missing(frame: pd.DataFrame, source: dict) -> bool:
-    column = source["column_name"]
-    if column not in frame:
-        return True
-    values = frame[column]
-    return bool(values.isna().all() or values.astype(str).str.strip().eq("").all())
-
-
 def _assessment_result(
     contract: dict,
     units: pd.DataFrame,
     *,
+    plan: JudgePlan,
     scores: pd.Series | None = None,
     calibration_metrics: dict[str, float] | None = None,
 ) -> dict[str, object]:
@@ -426,6 +372,13 @@ def _assessment_result(
         "contract_version": "laim-assessment-result.v1",
         "status": "computed",
         "assessment_mode": contract["assessment_mode"],
+        "scoring_method": contract["scoring"]["method"],
+        # contract_formula: судья размечает источники, score считает формула
+        # контракта (та же, что у адаптера и km-dynamic). judge_final_score:
+        # судья ставит готовый score, формула отчёта не воспроизводится.
+        "scoring_semantics": plan.semantics,
+        "scoring_semantics_reason": plan.reason,
+        "judge_fields": list(plan.judge_source_ids),
         "total_units": len(units),
         "scored_units": len(units) if scores is None else int(scores.notna().sum()),
     }
@@ -524,7 +477,23 @@ def main(
     if stage in {"monitoring", "combined"}:
         monitoring_umr = normalize_umr(monitoring_umr, contract)
 
-    assessment_contract = _assessment_contract(contract)
+    # Что размечает судья и какой формулой считается score — одно решение на
+    # весь запуск: калибровка и мониторинг обязаны измерять одно и то же.
+    # Для accuracy prediction (класс агента) в эталоне есть всегда; на
+    # мониторинге это свойство конвертера трейсов.
+    prediction_observed = True
+    if contract["scoring"]["method"] == "accuracy" and stage in {"monitoring", "combined"}:
+        prediction = source_by_role(contract, "prediction")
+        prediction_observed = source_observed(monitoring_umr, prediction)
+        if not prediction_observed:
+            print(
+                f"monitoring: prediction {prediction['column_name']!r} недоступен в "
+                "UMR — судья оценивает output_answer, accuracy отчёта не воспроизводится"
+            )
+    plan = build_judge_plan(contract, prediction_observed=prediction_observed)
+    assessment_contract = plan.contract
+    source_ids = list(plan.judge_source_ids)
+    print(f"assessment: scoring_semantics={plan.semantics} ({plan.reason})")
     # Packed dialogue разворачивается до построения units: broadcast_scores
     # пишет по позициям, поэтому reference_umr обязан совпадать с ними построчно.
     reference_umr = normalize_umr(_load_df(reference_umr), contract)
@@ -534,15 +503,12 @@ def main(
         assessment_contract,
         require_sources=True,
     )
-    source_ids = [
-        source["source_id"] for source in assessment_contract["scoring"]["sources"]
-    ]
     instruction = _load_instruction(assessor_instruction)
     if not instruction.strip():
         raise MonitoringContractError(
             "LLM-оценка требует непустую инструкцию в assessor_instruction"
         )
-    instruction += "\n\n" + _source_instruction(assessment_contract)
+    instruction += "\n\n" + judge_instruction(plan)
     domain_path = _domain_path(domain_rag_files_zip)
 
     judge_units = _labelled_reference_units(rag_units, source_ids)
@@ -569,11 +535,7 @@ def main(
             instruction_llm_preprocessing,
         )
         acc_auto = calibration_metrics["acc_auto"]
-        scores = _score_predictions(
-            test_units,
-            predictions,
-            assessment_contract,
-        )
+        scores = _score_predictions(test_units, predictions, plan)
         scored_output = _broadcast_predictions(
             reference_umr,
             test_units,
@@ -583,23 +545,17 @@ def main(
         assessment_result = _assessment_result(
             contract,
             test_units,
+            plan=plan,
             scores=scores,
             calibration_metrics=calibration_metrics,
         )
 
     if stage in {"monitoring", "combined"} and monitoring_umr is not None:
-        # Трейсы не несут колонок размеченной корзины: без наблюдаемого
-        # prediction судья оценивает сам output_answer, а не отказывается.
+        # Без наблюдаемого prediction (трейс не несёт класс агента) судья
+        # оценивает сам output_answer — это уже учтено в plan (judge_final_score).
         monitoring_assessment = monitoring_umr
-        if contract["scoring"]["method"] == "accuracy":
-            prediction = _source_by_role(contract, "prediction")
-            if _source_missing(monitoring_umr, prediction):
-                print(
-                    f"monitoring: prediction {prediction['column_name']!r} "
-                    "недоступен в UMR, судья оценивает output_answer"
-                )
-            else:
-                monitoring_assessment = _assessment_frame(monitoring_umr, contract)
+        if contract["scoring"]["method"] == "accuracy" and prediction_observed:
+            monitoring_assessment = _assessment_frame(monitoring_umr, contract)
         monitoring_units = _assessor_units(
             monitoring_assessment,
             assessment_contract,
@@ -618,11 +574,7 @@ def main(
             source_ids,
             num_assessors,
         )
-        scores = _score_predictions(
-            monitoring_units,
-            predictions,
-            assessment_contract,
-        )
+        scores = _score_predictions(monitoring_units, predictions, plan)
         scored_output = _broadcast_predictions(
             monitoring_umr,
             monitoring_units,
@@ -632,6 +584,7 @@ def main(
         assessment_result = _assessment_result(
             contract,
             monitoring_units,
+            plan=plan,
             scores=scores,
             calibration_metrics=calibration_metrics,
         )

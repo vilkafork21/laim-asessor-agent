@@ -180,6 +180,7 @@
     "runConfiguration": {
       "sourceFiles": [
         "main.py",
+        "assessment_plan.py",
         "utils.py",
         "agent/__init__.py",
         "agent/asessor_agent.py",

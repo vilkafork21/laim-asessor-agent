@@ -2,11 +2,27 @@
 
 Система автоматической оценки ответов LLM-агентов на основе подхода "LLM As A Judge" с использованием RAG для few-shot обучения и Pydantic structured output.
 
-Для `scoring.method=accuracy` эталонные `prediction` и `target` используются
-только в `laim-baskets-adapter`, который материализует `main_metric`. Ассесор
-калибруется на этой итоговой метке и на monitoring оценивает наблюдаемое
-prediction без требования `GT` в трейсах. `acc_auto` — точность ассесора на
-holdout эталонной корзины, а не метрика live-трейсов.
+## Судья и формула КМ разделены
+
+Формула ключевой метрики приходит контрактом `monitoring_metric`
+(`laim-monitoring-metric.v2`) от `laim-baskets-adapter` и исполняется общим
+пакетом `laim_monitoring` — тем же кодом, что у адаптера и km-dynamic. Судья
+(LLM) не ставит «оценку метрики»: он воспроизводит разметку человека, а score
+единицы считает формула контракта (`assessment_plan.py`).
+
+| `scoring.method` | Что предсказывает судья | Как считается score |
+|---|---|---|
+| `identity`, `mean_criteria`, `all_criteria`, `majority`, `all_assessors` | каждый источник контракта (итог, критерии, голоса) со шкалой из корзины | формула контракта |
+| `accuracy`, prediction наблюдается в UMR | только `target` — истинный класс запроса | `prediction == target`, prediction из UMR |
+| `accuracy`, prediction в monitoring UMR нет | готовый score 0/1 | identity; accuracy отчёта не воспроизводится |
+| любой метод, `assessment_mode=dialogue` | готовый score диалога | identity |
+
+Выбранная семантика фиксируется в `assessment_result.scoring_semantics`
+(`contract_formula` либо `judge_final_score`) с причиной. Калибровка и
+мониторинг используют одно решение на запуск, поэтому `acc_auto` измеряет
+ровно то, чем потом размечается мониторинг. `acc_auto` — доля точных
+совпадений разметки судьи с человеком на holdout эталонной корзины, а не
+метрика live-трейсов.
 
 ## Возможности
 
