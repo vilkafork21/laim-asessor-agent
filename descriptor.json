@@ -218,7 +218,8 @@
         "retriever/retriever.py",
         "laim_monitoring/__init__.py",
         "laim_monitoring/core.py",
-        "measurement.py"
+        "measurement.py",
+        "dataset_identity.py"
       ],
       "libraryDependencies": [
         "requirements.txt"

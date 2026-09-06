@@ -33,6 +33,7 @@ def test_combined_uses_calibrated_judge_without_holdout_in_rag(monkeypatch):
         monitoring_umr=_monitoring(), stage='combined',
     )
 
+    assert result['assessment_result']['input_dataset_id'] == assessor.frame_identity(_monitoring())
     assert len(built) == 1
     assert len(calls) == 2
     assert calls[0][0] is calls[1][0] is built[0]

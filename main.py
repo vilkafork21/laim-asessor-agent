@@ -12,6 +12,8 @@ from typing import Annotated
 from uuid import uuid4
 
 import pandas as pd
+
+from dataset_identity import frame_identity
 from langchain_core.embeddings import Embeddings
 from langchain_gigachat.chat_models import GigaChat
 from langchain_gigachat.embeddings.gigachat import GigaChatEmbeddings
@@ -479,8 +481,9 @@ def _assessment_result(
     return result
 
 
-def _unavailable_result(contract: dict) -> dict[str, object]:
+def _unavailable_result(contract: dict, input_dataset_id: str | None = None) -> dict[str, object]:
     result: dict[str, object] = {
+        "input_dataset_id": input_dataset_id,
         "contract_version": "laim-assessment-result.v2",
         "definition_id": contract.get("definition_id"),
         "status": "not_computable",
@@ -570,6 +573,7 @@ def main(
     if stage not in {"scoring", "monitoring", "combined"}:
         raise ValueError(f"Неизвестный stage: {stage}")
     monitoring_umr = _load_df(monitoring_umr)
+    input_dataset_id = frame_identity(monitoring_umr) if monitoring_umr is not None else None
     if stage in {"monitoring", "combined"} and monitoring_umr is None:
         raise MonitoringContractError(f"stage={stage} требует monitoring_umr")
     if contract["status"] != "computed":
@@ -578,7 +582,7 @@ def main(
         return {
             "scored_data": _unavailable_scored_data(monitoring_umr),
             "acc_auto": None,
-            "assessment_result": _unavailable_result(contract),
+            "assessment_result": _unavailable_result(contract, input_dataset_id=input_dataset_id),
         }
     if stage in {"monitoring", "combined"}:
         if monitoring_umr.empty:
@@ -586,7 +590,7 @@ def main(
             logger.warning(reason)
             result = _unavailable_result({
                 **contract, "reason_code": "no_monitoring_units", "reason": reason,
-            })
+            }, input_dataset_id=input_dataset_id)
             result["total_units"] = 0
             return {
                 "scored_data": _unavailable_scored_data(monitoring_umr),
@@ -608,7 +612,7 @@ def main(
                     "acc_auto": None,
                     "assessment_result": _unavailable_result({
                         **contract, "reason_code": "missing_prediction", "reason": reason,
-                    }),
+                    }, input_dataset_id=input_dataset_id),
                 }
 
     reference_umr = _load_df(reference_umr)
@@ -630,7 +634,7 @@ def main(
             logger.warning(reason)
             return {"scored_data": _unavailable_scored_data(monitoring_umr), "acc_auto": None,
                     "assessment_result": _unavailable_result({**contract,
-                        "reason_code": "evidence_unavailable", "reason": reason})}
+                        "reason_code": "evidence_unavailable", "reason": reason}, input_dataset_id=input_dataset_id)}
         _assessor_units(monitoring_umr, contract, require_sources=False)
     # Packed dialogue разворачивается до построения units: broadcast_scores
     # пишет по позициям, поэтому reference_umr обязан совпадать с ними построчно.
@@ -728,6 +732,8 @@ def main(
             calibration_metrics=calibration_metrics,
             max_invalid_share=max_invalid_share,
         )
+    if stage != "scoring":
+        assessment_result["input_dataset_id"] = input_dataset_id
     assessment_result["run_id"] = uuid4().hex
     if scored_output is not None:
         scored_output["assessment_run_id"] = assessment_result["run_id"]
