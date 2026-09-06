@@ -21,14 +21,14 @@ from assessment_plan import (
     JudgePlan,
     apply_judge_labels,
     build_judge_plan,
+    input_observed,
     judge_instruction,
-    prediction_source,
     score_judge_predictions,
-    source_observed,
 )
 import laim_monitoring
 from laim_monitoring import (
     MonitoringContractError,
+    agent_inputs,
     broadcast_scores,
     normalize_umr,
     unitize,
@@ -109,27 +109,24 @@ def _domain_path(value) -> str | None:
 
 
 def _assessment_frame(frame: pd.DataFrame, contract: dict) -> pd.DataFrame:
-    """Судья видит как ответ агента его наблюдаемый prediction (класс/маршрут)."""
-    prediction = prediction_source(contract)
-    if prediction is None:
+    """Судья видит как ответ агента его наблюдаемый вход (класс/маршрут), если он один."""
+    agent = agent_inputs(contract)
+    if len(agent) != 1:
         return frame
-    column = prediction["column_name"]
-    if not source_observed(frame, prediction):
-        raise MonitoringContractError(
-            f"UMR не содержит наблюдаемое prediction: {column}"
-        )
+    column = agent[0]["column"]
+    if not input_observed(frame, agent[0]):
+        raise MonitoringContractError(f"UMR не содержит наблюдаемый ответ агента: {column}")
     result = frame.copy()
     result["output_answer"] = result[column]
     return result
 
 
-def _assessor_units(frame: pd.DataFrame, contract: dict, *, require_sources: bool) -> pd.DataFrame:
+def _assessor_units(frame: pd.DataFrame, contract: dict, *, require_inputs: bool) -> pd.DataFrame:
     units = unitize(frame, contract)
-    source_ids = [source["source_id"] for source in contract["scoring"]["sources"]]
-    if require_sources:
-        missing = [source_id for source_id in source_ids if source_id not in units]
+    if require_inputs:
+        missing = [item["name"] for item in contract["inputs"] if item["name"] not in units]
         if missing:
-            raise MonitoringContractError(f"RAG не содержит источники MeasurementPlan: {missing}")
+            raise MonitoringContractError(f"Эталонная корзина не содержит входы формулы: {missing}")
     return units
 
 
@@ -371,7 +368,6 @@ def _assessment_result(
         "contract_version": "laim-assessment-result.v1",
         "status": "computed",
         "assessment_mode": contract["assessment_mode"],
-        "scoring_method": contract["scoring"]["method"],
         "formula": plan.contract["formula"],
         "laim_monitoring_version": laim_monitoring.__version__,
         # contract_formula: судья размечает входы формулы, КМ считает формула
@@ -379,7 +375,7 @@ def _assessment_result(
         # судья ставит готовый score, формула отчёта не воспроизводится.
         "scoring_semantics": plan.semantics,
         "scoring_semantics_reason": plan.reason,
-        "judge_fields": list(plan.judge_source_ids),
+        "judge_fields": list(plan.judge_fields),
         "total_units": len(units),
         "scored_units": len(units) if scores is None else int(scores.notna().sum()),
     }
@@ -492,13 +488,12 @@ def main(
     # весь запуск: калибровка и мониторинг обязаны измерять одно и то же.
     # Для accuracy prediction (класс агента) в эталоне есть всегда; на
     # мониторинге это свойство конвертера трейсов.
-    prediction = prediction_source(contract)
-    prediction_observed = True
-    if prediction is not None and stage in {"monitoring", "combined"}:
-        prediction_observed = source_observed(monitoring_umr, prediction)
-    plan = build_judge_plan(contract, prediction_observed=prediction_observed)
+    agent_observed = True
+    if stage in {"monitoring", "combined"}:
+        agent_observed = all(input_observed(monitoring_umr, item) for item in agent_inputs(contract))
+    plan = build_judge_plan(contract, agent_observed=agent_observed)
     assessment_contract = plan.contract
-    source_ids = list(plan.judge_source_ids)
+    source_ids = list(plan.judge_fields)
     print(f"assessment: scoring_semantics={plan.semantics} ({plan.reason})")
     # Packed dialogue разворачивается до построения units: broadcast_scores
     # пишет по позициям, поэтому reference_umr обязан совпадать с ними построчно.
@@ -507,7 +502,7 @@ def main(
     rag_units = _assessor_units(
         rag_assessment,
         assessment_contract,
-        require_sources=True,
+        require_inputs=True,
     )
     instruction = _load_instruction(assessor_instruction)
     if not instruction.strip():
@@ -557,12 +552,12 @@ def main(
         # Без наблюдаемого prediction (трейс не несёт класс агента) судья
         # оценивает сам output_answer — это уже учтено в plan (judge_final_score).
         monitoring_assessment = (
-            _assessment_frame(monitoring_umr, contract) if prediction_observed else monitoring_umr
+            _assessment_frame(monitoring_umr, contract) if agent_observed else monitoring_umr
         )
         monitoring_units = _assessor_units(
             monitoring_assessment,
             assessment_contract,
-            require_sources=False,
+            require_inputs=False,
         )
         predictions = _predict(
             _build_assessor(

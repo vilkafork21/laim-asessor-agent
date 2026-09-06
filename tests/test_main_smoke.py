@@ -55,34 +55,16 @@ def _no_llm(monkeypatch):
 
 CONTRACT = {
     "contract_version": "laim-monitoring-metric.v3",
-    "umr_version": "laim-umr.v2",
     "status": "computed",
     "basket_id": "CI1",
-    "name": "Macro F1",
-    "score_column": "main_metric",
+    "metric_name": "Macro F1",
     "assessment_mode": "qa",
-    "scoring": {
-        "method": "formula",
-        "sources": [
-            {"source_id": "source_1", "name": "prediction", "column_name": "класс_output_answer",
-             "role": "prediction", "normalization": "label", "polarity": "direct"},
-            {"source_id": "source_2", "name": "target", "column_name": "класс_reference_answer",
-             "role": "target", "normalization": "label", "polarity": "direct"},
-        ],
-        "missing_policy": "exclude_unit",
-        "majority_denominator": None,
-    },
     "formula": 'f1(prediction, target, "macro")',
-    "aggregation": {"method": "mean", "weight_column": None},
-    "baseline": {
-        "value": 0.5833, "scale": "ratio", "value_source": "validation_report",
-        "reported_value": 0.5833, "reported_scale": "ratio",
-        "recomputed_value": 0.58333, "reconciliation": "match",
-    },
-    "primary_validation": {
-        "threshold": None, "comparator": None, "scale": "ratio", "verdict": None, "affects_monitoring": False,
-    },
-    "evidence": {},
+    "inputs": [
+        {"name": "prediction", "column": "класс_output_answer", "judged": False},
+        {"name": "target", "column": "класс_reference_answer", "judged": True},
+    ],
+    "baseline": {"value": 0.5833, "recomputed_value": 0.58333, "reconciliation": "match"},
 }
 
 REFERENCE = pd.DataFrame({
@@ -118,7 +100,7 @@ def test_judge_labels_land_in_contract_columns_and_formula_reproduces_km():
     assessment = result["assessment_result"]
     assert assessment["status"] == "computed"
     assert assessment["scoring_semantics"] == "contract_formula"
-    assert assessment["judge_fields"] == ["source_2"]
+    assert assessment["judge_fields"] == ["target"]
     assert result["acc_auto"] == 1.0
     scored = result["scored_data"]
     assert scored["класс_reference_answer"].tolist() == ["a", "b", "b"]
