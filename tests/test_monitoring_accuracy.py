@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 
 import main as assessor
 
@@ -390,3 +391,54 @@ def test_split_excludes_training_groups_with_holdout_context():
     assert test['_group_id'].tolist() == original_test['_group_id'].tolist()
     assert train_id not in train['_group_id'].tolist()
     assert not {str(x) for x in train.assessment_context} & {str(x) for x in test.assessment_context}
+
+
+@pytest.mark.parametrize('copies', [1, 20])
+def test_duplicate_holdout_tasks_cannot_manufacture_admission(monkeypatch, copies):
+    holdout = pd.DataFrame({
+        'assessment_context': [{'text': 'плохой ответ'}, {'text': 'хороший ответ'}] * copies,
+        'assessment_score': [0., 1.] * copies,
+        '_group_id': [f'g{i}' for i in range(2 * copies)],
+    })
+    monkeypatch.setattr(assessor, '_split_units', lambda *_: (holdout, holdout))
+    seen = []
+
+    def predict(_judge, test, _sources, _count):
+        seen.append(len(test))
+        return pd.DataFrame({'agent_assessment_score': test.assessment_score})
+
+    metrics, test, _, _ = _calibrate(monkeypatch, holdout, predict, min_holdout_units=20)
+    assert seen == [2]
+    assert len(test) == metrics['holdout_units'] == 2
+    assert metrics['holdout_source_units'] == 2 * copies
+    assert metrics['admission_status'] == 'not_assessed'
+
+
+def test_conflicting_human_labels_for_same_context_block_before_llm(monkeypatch):
+    holdout = pd.DataFrame({'assessment_context': [{'text': 'один ответ'}] * 2,
+                            'assessment_score': [0., 1.]})
+    monkeypatch.setattr(assessor, '_split_units', lambda *_: (holdout, holdout))
+
+    def predict(*_):
+        pytest.fail('Противоречивая разметка не должна доходить до LLM')
+
+    with pytest.raises(assessor.MonitoringContractError, match='противоречив'):
+        _calibrate(monkeypatch, holdout, predict)
+
+
+@pytest.mark.parametrize('group_count', [2, 40])
+def test_many_turns_of_few_groups_do_not_meet_holdout_minimum(monkeypatch, group_count):
+    holdout = pd.DataFrame({
+        'assessment_context': [{'text': f'ответ {i}'} for i in range(40)],
+        'assessment_score': [0., 1.] * 20,
+        '_group_id': [f'g{i % group_count}' for i in range(40)],
+    })
+    monkeypatch.setattr(assessor, '_split_units', lambda *_: (holdout, holdout))
+
+    def predict(_judge, test, _sources, _count):
+        return pd.DataFrame({'agent_assessment_score': test.assessment_score})
+
+    metrics, _, _, _ = _calibrate(monkeypatch, holdout, predict, min_holdout_units=20)
+    assert metrics['holdout_units'] == 40
+    assert metrics['admission_support']['paired_units'] == group_count
+    assert metrics['admission_status'] == ('not_assessed' if group_count == 2 else 'green')

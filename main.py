@@ -356,6 +356,16 @@ def _calibrate(
     if len(rag_units) < 2:
         raise MonitoringContractError("Для calibration требуется минимум две единицы")
     train, test = _split_units(rag_units, source_ids, train_fraction)
+    source_units = len(test)
+    if "assessment_context" in test:
+        keys = test["assessment_context"].map(
+            lambda value: json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False)
+        )
+        if test.groupby(keys)[source_ids].nunique(dropna=False).gt(1).any().any():
+            raise MonitoringContractError("holdout: один assessment_context имеет противоречивую человеческую разметку")
+        test = test.loc[~keys.duplicated()].reset_index(drop=True)
+        if len(test) != source_units:
+            logger.warning("holdout: %d строк представляют %d уникальных задач", source_units, len(test))
     judge = _build_assessor(
         models, train, source_ids, instruction, domain_path,
         instruction_llm_preprocessing, assessment_contract["evaluation"]["score_values"],
@@ -392,7 +402,16 @@ def _calibrate(
         "bias_ci_upper": None if bias is None else bias["ci_upper"],
         "bias_units": None if bias is None else bias["units"],
     }
-    admission = admit(metrics, **admission_settings)
+    groups = test["_group_id"] if "_group_id" in test else pd.Series(test.index, index=test.index)
+    evaluation = assessment_contract["evaluation"]
+    defects = (human_scores.lt(evaluation["defect_threshold"]) if evaluation["higher_is_better"]
+               else human_scores.gt(evaluation["defect_threshold"]))
+    support = {"holdout_units": int(groups.nunique()),
+               "paired_units": int(groups[paired].nunique()),
+               "holdout_defect_units": int(groups[defects].nunique())}
+    metrics["holdout_source_units"] = source_units
+    metrics["admission_support"] = {"scope": "distinct_groups_after_exact_context_deduplication", **support}
+    admission = admit({**metrics, **support}, **admission_settings)
     metrics["admission_status"] = admission.status
     metrics["admission_reason_code"] = admission.reason_code
     metrics["admission_reason"] = admission.reason
