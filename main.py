@@ -26,10 +26,10 @@ from assessment_plan import (
     score_judge_predictions,
     source_observed,
 )
+import laim_monitoring
 from laim_monitoring import (
     MonitoringContractError,
     broadcast_scores,
-    contract_formula,
     normalize_umr,
     unitize,
     validate_monitoring_metric,
@@ -372,7 +372,8 @@ def _assessment_result(
         "status": "computed",
         "assessment_mode": contract["assessment_mode"],
         "scoring_method": contract["scoring"]["method"],
-        "formula": contract_formula(plan.contract),
+        "formula": plan.contract["formula"],
+        "laim_monitoring_version": laim_monitoring.__version__,
         # contract_formula: судья размечает входы формулы, КМ считает формула
         # контракта (та же, что у адаптера и km-dynamic). judge_final_score:
         # судья ставит готовый score, формула отчёта не воспроизводится.
@@ -385,6 +386,16 @@ def _assessment_result(
     if calibration_metrics is not None:
         result["calibration_metrics"] = calibration_metrics
     return result
+
+
+# Доля единиц без ответа судьи, выше которой разметка мониторинга невалидна:
+# КМ по «выжившим» строкам смещена. Единичные отказы остаются NaN и исключаются.
+MAX_JUDGE_FAILURE_SHARE = 0.2
+
+
+def _judge_failure_share(predictions: pd.DataFrame, source_ids: list[str]) -> float:
+    columns = [f"agent_{source_id}" for source_id in source_ids]
+    return float(predictions[columns].isna().all(axis=1).mean()) if len(predictions) else 0.0
 
 
 def _unavailable_result(contract: dict) -> dict[str, object]:
@@ -577,6 +588,13 @@ def main(
             scores=scores,
             calibration_metrics=calibration_metrics,
         )
+        failure_share = _judge_failure_share(predictions, source_ids)
+        if failure_share > MAX_JUDGE_FAILURE_SHARE:
+            assessment_result["status"] = "not_computable"
+            assessment_result["reason"] = (
+                f"Судья не ответил на {failure_share:.0%} единиц мониторинга "
+                f"(порог {MAX_JUDGE_FAILURE_SHARE:.0%}): КМ по оставшимся смещена"
+            )
     return {
         "scored_data": scored_output,
         "acc_auto": acc_auto,

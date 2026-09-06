@@ -24,12 +24,15 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from laim_monitoring import MonitoringContractError, contract_formula, score_units
+from laim_monitoring import (
+    JUDGE_SCORE_SOURCE_ID,
+    MonitoringContractError,
+    judge_score_contract,
+    score_units,
+)
 
 CONTRACT_FORMULA = "contract_formula"
 JUDGE_FINAL_SCORE = "judge_final_score"
-
-JUDGE_SCORE_SOURCE_ID = "assessment_score"
 
 _ROLE_INSTRUCTION = {
     "target": (
@@ -57,13 +60,6 @@ class JudgePlan:
         return self.contract["scoring"]["method"]
 
 
-def source_by_role(contract: dict, role: str) -> dict:
-    for source in contract["scoring"]["sources"]:
-        if source["role"] == role:
-            return source
-    raise MonitoringContractError(f"В контракте нет источника с ролью {role!r}")
-
-
 def source_observed(frame: pd.DataFrame | None, source: dict) -> bool:
     """Колонка источника есть в UMR и несёт хотя бы одно непустое значение."""
     if frame is None:
@@ -75,29 +71,6 @@ def source_observed(frame: pd.DataFrame | None, source: dict) -> bool:
     if values.empty:
         return False
     return bool(values.astype(str).str.strip().ne("").any())
-
-
-def _judge_score_contract(contract: dict) -> dict:
-    result = deepcopy(contract)
-    result["scoring"] = {
-        "method": "identity",
-        "sources": [
-            {
-                "source_id": JUDGE_SCORE_SOURCE_ID,
-                "column_name": "main_metric",
-                "role": "final_score",
-                "normalization": "numeric",
-                "polarity": "direct",
-            }
-        ],
-        "missing_policy": contract["scoring"]["missing_policy"],
-        "majority_denominator": None,
-    }
-    weighted = contract.get("aggregation", {}).get("method") == "frequency_weighted_mean"
-    result["formula"] = (
-        f"wmean({JUDGE_SCORE_SOURCE_ID}, weight)" if weighted else f"mean({JUDGE_SCORE_SOURCE_ID})"
-    )
-    return result
 
 
 def prediction_source(contract: dict) -> dict | None:
@@ -119,7 +92,7 @@ def build_judge_plan(contract: dict, *, prediction_observed: bool = True) -> Jud
     prediction = prediction_source(contract)
     if mode == "dialogue":
         return JudgePlan(
-            contract=_judge_score_contract(contract),
+            contract=judge_score_contract(contract),
             judge_source_ids=(JUDGE_SCORE_SOURCE_ID,),
             semantics=JUDGE_FINAL_SCORE,
             reason=(
@@ -129,7 +102,7 @@ def build_judge_plan(contract: dict, *, prediction_observed: bool = True) -> Jud
         )
     if prediction is not None and not prediction_observed:
         return JudgePlan(
-            contract=_judge_score_contract(contract),
+            contract=judge_score_contract(contract),
             judge_source_ids=(JUDGE_SCORE_SOURCE_ID,),
             semantics=JUDGE_FINAL_SCORE,
             reason=(
@@ -149,7 +122,7 @@ def build_judge_plan(contract: dict, *, prediction_observed: bool = True) -> Jud
         semantics=CONTRACT_FORMULA,
         reason=(
             "судья воспроизводит разметку корзины, КМ считает формула контракта: "
-            + contract_formula(contract)
+            + contract["formula"]
         ),
     )
 
@@ -168,7 +141,7 @@ def judge_instruction(plan: JudgePlan) -> str:
     if plan.semantics == CONTRACT_FORMULA and prediction_source(plan.contract) is not None:
         lines.append(
             "Итоговая оценка НЕ запрашивается: КМ считается формулой "
-            f"{contract_formula(plan.contract)!r} по твоей разметке и ответу агента."
+            f"{plan.contract['formula']!r} по твоей разметке и ответу агента."
         )
     return "\n".join(lines)
 

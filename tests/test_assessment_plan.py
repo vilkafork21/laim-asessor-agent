@@ -14,7 +14,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from assessment_plan import (  # noqa: E402
     CONTRACT_FORMULA,
     JUDGE_FINAL_SCORE,
-    JUDGE_SCORE_SOURCE_ID,
     apply_judge_labels,
     build_judge_plan,
     judge_instruction,
@@ -22,15 +21,20 @@ from assessment_plan import (  # noqa: E402
     source_observed,
 )
 from laim_monitoring import (  # noqa: E402
+    JUDGE_SCORE_SOURCE_ID,
     MonitoringContractError,
     aggregate_main_metric,
     broadcast_scores,
     unitize,
+    validate_monitoring_metric,
 )
 
 
-def _contract(method: str, sources: list[dict], *, mode: str = "qa", policy: str = "exclude_unit") -> dict:
-    return {
+def _contract(method: str, sources: list[dict], *, mode: str = "qa", policy: str = "exclude_unit",
+              formula: str | None = None) -> dict:
+    """Контракт как его видит нода: после validate_monitoring_metric (v3, формула явная)."""
+    return validate_monitoring_metric({
+        "formula": formula,
         "contract_version": "laim-monitoring-metric.v2",
         "umr_version": "laim-umr.v2",
         "status": "computed",
@@ -55,7 +59,7 @@ def _contract(method: str, sources: list[dict], *, mode: str = "qa", policy: str
             "verdict": None, "affects_monitoring": False,
         },
         "evidence": {},
-    }
+    })
 
 
 def _source(source_id: str, column: str, role: str, normalization="numeric") -> dict:
@@ -97,6 +101,7 @@ def test_accuracy_with_observed_prediction_judge_predicts_target_only():
     assert plan.judge_source_ids == ("source_2",)
     assert plan.contract["scoring"]["method"] == "accuracy"
     assert plan.contract["scoring"]["sources"] == ACCURACY["scoring"]["sources"]
+    assert plan.contract["formula"] == "mean(source_1 == source_2)"
 
 
 def test_accuracy_without_prediction_falls_back_to_judge_score_and_says_so():
@@ -220,8 +225,8 @@ def test_explicit_formula_contract_judge_predicts_only_labels():
             _source("source_1", "класс_output_answer", "prediction", "label") | {"name": "prediction"},
             _source("source_2", "класс_reference_answer", "target", "label") | {"name": "target"},
         ],
+        formula='f1(prediction, target, "macro")',
     )
-    contract["formula"] = 'f1(prediction, target, "macro")'
     plan = build_judge_plan(contract, prediction_observed=True)
     assert plan.judge_source_ids == ("source_2",)
     assert "f1(prediction, target" in plan.reason
