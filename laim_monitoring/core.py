@@ -11,10 +11,14 @@ from pathlib import Path
 
 import pandas as pd
 
+from . import formula as formula_lang
+
 _VERSION = "laim-monitoring-metric.v2"
 _LEGACY_VERSION = "laim-monitoring-metric.v1"
 _UMR_VERSION = "laim-umr.v2"
 _ASSESSMENT_MODES = {"qa", "turn_with_history", "dialogue"}
+# Готовые способы score из v2: каждый — это просто формула (см. contract_formula).
+# "formula" — метрика записана явно, как она определена в отчёте о валидации.
 _METHOD_ROLES = {
     "identity": {"final_score": (1, 1)},
     "accuracy": {"prediction": (1, 1), "target": (1, 1)},
@@ -23,7 +27,9 @@ _METHOD_ROLES = {
     "majority": {"assessor_vote": (1, None)},
     "all_assessors": {"assessor_vote": (2, None)},
 }
+_ROLES = {"final_score", "criterion", "assessor_vote", "prediction", "target"}
 _MISSING = {"fail", "exclude_unit", "exclude_value", "zero"}
+_WEIGHT = "weight"
 
 
 class MonitoringContractError(ValueError):
@@ -96,11 +102,12 @@ def validate_monitoring_metric(payload: object, *, require_computed: bool = True
     scoring = _require(contract, "scoring")
     if not isinstance(scoring, dict):
         raise MonitoringContractError("scoring должен быть object")
-    method = _require(scoring, "method", set(_METHOD_ROLES))
+    method = _require(scoring, "method", set(_METHOD_ROLES) | {"formula"})
     sources = _require(scoring, "sources")
     if not isinstance(sources, list) or not sources:
         raise MonitoringContractError("scoring.sources должен быть непустым списком")
     source_ids = set()
+    names = set()
     role_counts: dict[str, int] = {}
     for source in sources:
         if not isinstance(source, dict):
@@ -110,21 +117,30 @@ def validate_monitoring_metric(payload: object, *, require_computed: bool = True
             raise MonitoringContractError(f"Повторяется source_id: {source_id}")
         source_ids.add(source_id)
         _require(source, "column_name")
-        role = _require(source, "role")
+        role = _require(source, "role", _ROLES)
         role_counts[role] = role_counts.get(role, 0) + 1
-        normalization = _require(source, "normalization")
-        if not isinstance(normalization, dict) and normalization not in {"numeric", "label"}:
-            raise MonitoringContractError(f"Недопустимая normalization у {source_id}")
-        _require(source, "polarity", {"direct", "inverted"})
-    expected_roles = _METHOD_ROLES[method]
-    if set(role_counts) != set(expected_roles):
-        raise MonitoringContractError(
-            f"Метод {method} требует роли {sorted(expected_roles)}, получено {sorted(role_counts)}"
-        )
-    for role, (minimum, maximum) in expected_roles.items():
-        count = role_counts[role]
-        if count < minimum or (maximum is not None and count > maximum):
-            raise MonitoringContractError(f"Недопустимое число источников роли {role}: {count}")
+        # Адаптер публикует значения уже нормализованными: числа и метки.
+        _require(source, "normalization", {"numeric", "label"})
+        _require(source, "polarity", {"direct"})
+        name = source_name(source)
+        if not name.isidentifier() or name in formula_lang.HELPERS or name == _WEIGHT:
+            raise MonitoringContractError(f"Недопустимое имя входа формулы: {name!r}")
+        if name in names:
+            raise MonitoringContractError(f"Повторяется имя входа формулы: {name!r}")
+        names.add(name)
+    if method == "formula":
+        if not isinstance(contract.get("formula"), str):
+            raise MonitoringContractError("method=formula требует текст formula")
+    else:
+        expected_roles = _METHOD_ROLES[method]
+        if set(role_counts) != set(expected_roles):
+            raise MonitoringContractError(
+                f"Метод {method} требует роли {sorted(expected_roles)}, получено {sorted(role_counts)}"
+            )
+        for role, (minimum, maximum) in expected_roles.items():
+            count = role_counts[role]
+            if count < minimum or (maximum is not None and count > maximum):
+                raise MonitoringContractError(f"Недопустимое число источников роли {role}: {count}")
     missing_policy = _require(scoring, "missing_policy", _MISSING)
     denominator = scoring.get("majority_denominator")
     if method == "majority" and denominator not in {"declared", "present"}:
@@ -139,6 +155,15 @@ def validate_monitoring_metric(payload: object, *, require_computed: bool = True
     if reducer == "mean" and weight_column is not None:
         raise MonitoringContractError("mean не должен объявлять weight_column")
 
+    try:
+        parsed = formula_lang.parse(contract_formula(contract))
+    except formula_lang.FormulaError as exc:
+        raise MonitoringContractError(f"Формула КМ: {exc}") from exc
+    unknown = [name for name in parsed.inputs if name not in names and name != _WEIGHT]
+    if unknown:
+        raise MonitoringContractError(
+            f"Формула ссылается на входы {unknown}, объявлены {sorted(names)} и {_WEIGHT}"
+        )
     baseline = _require(contract, "baseline")
     _decimal(_require(baseline, "value"), "baseline.value")
     _decimal(_require(baseline, "recomputed_value"), "baseline.recomputed_value")
@@ -578,114 +603,150 @@ def unitize(frame: pd.DataFrame, payload: dict) -> pd.DataFrame:
     return _unitize(frame, validate_monitoring_metric(payload))
 
 
-def _normalize(value: object, source: dict) -> object | None:
-    if _blank(value):
-        return None
-    normalization = source["normalization"]
-    if normalization == "label":
-        result: object = str(value).strip().casefold()
-    elif normalization == "numeric":
-        text = str(value).strip()
-        percent = text.endswith("%")
-        result = _decimal(text.rstrip("%").strip())
-        if percent:
-            result /= Decimal(100)
-    else:
-        lookup = {str(key).strip().casefold(): _decimal(mapped) for key, mapped in normalization.items()}
-        key = str(value).strip().casefold()
-        if key not in lookup:
-            raise MonitoringContractError(
-                f"value_map источника {source['source_id']} не покрывает {value!r}"
-            )
-        result = lookup[key]
-    if source["polarity"] == "inverted":
-        if result not in {Decimal(0), Decimal(1)}:
-            raise MonitoringContractError("inverted polarity требует бинарное значение")
-        result = Decimal(1) - result
-    return result
+def source_name(source: dict) -> str:
+    """Имя входа в формуле: явный name либо source_id."""
+    return str(source.get("name") or source["source_id"])
 
 
-def _missing(policy: str, reason: str) -> Decimal | None:
-    if policy == "fail":
-        raise MonitoringContractError(reason)
-    if policy in {"exclude_unit", "exclude_value"}:
-        return None
-    return Decimal(0)
-
-
-def _present_values(
-    values: list[object], policy: str, reason: str
-) -> list[Decimal] | None:
-    """Применить missing_policy к значениям единицы: None означает «единица не оценивается»."""
-    if policy == "exclude_value":
-        values = [value for value in values if value is not None]
-        return values or None
-    if any(value is None for value in values):
-        replacement = _missing(policy, reason)
-        if replacement is None:
-            return None
-        values = [replacement if value is None else value for value in values]
-    return values
-
-
-def _min_binary(values: list[Decimal], method: str) -> Decimal:
-    if any(value not in {Decimal(0), Decimal(1)} for value in values):
-        raise MonitoringContractError(f"{method} требует 0/1")
-    return min(values)
-
-
-def _unanimous(votes: list[object], policy: str, reason: str) -> Decimal | None:
-    values = _present_values(votes, policy, reason)
-    return None if values is None else _min_binary(values, "all_assessors")
-
-
-def _score_row(row, contract: dict) -> Decimal | None:
+def contract_formula(contract: dict) -> str:
+    """Текст формулы КМ: явный `formula`, иначе синтез из готового метода v2."""
+    explicit = contract.get("formula")
+    if isinstance(explicit, str) and explicit.strip():
+        return explicit.strip()
     scoring = contract["scoring"]
-    by_role: dict[str, list[object]] = {}
-    for source in scoring["sources"]:
-        if source["source_id"] not in row.index:
-            raise MonitoringContractError(f"Нет source value {source['source_id']}")
-        by_role.setdefault(source["role"], []).append(_normalize(row[source["source_id"]], source))
     method = scoring["method"]
-    policy = scoring["missing_policy"]
+    if method == "formula":
+        raise MonitoringContractError("method=formula требует текст formula")
+    by_role: dict[str, list[str]] = {}
+    for source in scoring["sources"]:
+        by_role.setdefault(source["role"], []).append(source_name(source))
+    policy = scoring.get("missing_policy", "fail")
+
+    def rows(names: list[str]) -> list[str]:
+        return [f"fillna({name}, 0)" if policy == "zero" else name for name in names]
+
     if method == "identity":
-        value = by_role["final_score"][0]
-        return _missing(policy, "Отсутствует final score") if value is None else value
-    if method == "accuracy":
-        prediction, target = by_role["prediction"][0], by_role["target"][0]
-        if prediction is None or target is None:
-            return _missing(policy, "Отсутствует prediction или target")
-        return Decimal(int(prediction == target))
-    if method in {"mean_criteria", "all_criteria"}:
-        values = _present_values(by_role["criterion"], policy, "Отсутствует criterion score")
-        if values is None:
-            return None
-        if method == "mean_criteria":
-            return sum(values, Decimal(0)) / len(values)
-        return _min_binary(values, "all_criteria")
-    votes = by_role["assessor_vote"]
-    if method == "all_assessors":
-        # Единогласие: та же политика пропусков, что у all_criteria, но по голосам.
-        return _unanimous(votes, policy, "Отсутствует голос assessor")
-    present = [vote for vote in votes if vote is not None]
-    if any(vote not in {Decimal(0), Decimal(1)} for vote in present):
-        raise MonitoringContractError("majority требует 0/1")
-    if not present:
-        return _missing(policy, "Нет assessor votes")
-    denominator = len(votes) if scoring["majority_denominator"] == "declared" else len(present)
-    positives = sum(present, Decimal(0))
-    if positives * 2 == denominator:
-        return _missing(policy, "Majority завершился ничьей")
-    return Decimal(int(positives * 2 > denominator))
+        unit = rows(by_role["final_score"])[0]
+    elif method == "accuracy":
+        unit = f"{by_role['prediction'][0]} == {by_role['target'][0]}"
+    elif method == "mean_criteria":
+        names = rows(by_role["criterion"])
+        unit = (
+            f"avg({', '.join(names)})" if policy == "exclude_value" and len(names) > 1
+            else f"({' + '.join(names)}) / {len(names)}" if len(names) > 1
+            else names[0]
+        )
+    elif method in ("all_criteria", "all_assessors"):
+        names = rows(by_role["criterion" if method == "all_criteria" else "assessor_vote"])
+        unit = f"min({', '.join(names)})" if len(names) > 1 else names[0]
+    else:  # majority
+        declared = scoring.get("majority_denominator") == "declared"
+        unit = f"majority({', '.join(by_role['assessor_vote'])}{', declared=True' if declared else ''})"
+    weighted = contract.get("aggregation", {}).get("method") == "frequency_weighted_mean"
+    return f"wmean({unit}, {_WEIGHT})" if weighted else f"mean({unit})"
+
+
+def _normalized_column(units: pd.DataFrame, source: dict) -> pd.Series:
+    """Метки — текст, числа — float; пустое — NaN."""
+    raw = units[source["source_id"]]
+    if source["normalization"] == "label":
+        return raw.map(lambda v: None if _blank(v) else str(v)).astype(object)
+    return pd.to_numeric(raw, errors="coerce").astype("float64")
+
+
+def formula_columns(units: pd.DataFrame, contract: dict) -> dict[str, pd.Series]:
+    """Входы формулы, доступные в units; отсутствующие колонки просто не попадают."""
+    columns = {
+        source_name(source): _normalized_column(units, source)
+        for source in contract["scoring"]["sources"]
+        if source["source_id"] in units
+    }
+    if "input_query_count" in units:
+        columns[_WEIGHT] = pd.to_numeric(units["input_query_count"], errors="coerce").astype("float64")
+    return columns
+
+
+def _check_blanks(columns: dict[str, pd.Series], names: tuple[str, ...], policy: str) -> None:
+    if policy != "fail":
+        return
+    for name in names:
+        if name in columns and columns[name].isna().any():
+            raise MonitoringContractError(f"missing_policy=fail: вход {name!r} содержит пропуски")
+
+
+def unit_scores(units: pd.DataFrame, contract: dict) -> pd.Series:
+    """Построчный score единиц: построчная часть формулы mean(E)/wmean(E, w).
+
+    Для формул без построчной части (macro-F1 и т.п.) — совпадение prediction
+    с target, если обе роли есть, иначе NaN: такой метрике построчный score
+    не нужен, он служит только дрифт-тестам и примерам в отчёте.
+    """
+    parsed = formula_lang.parse(contract_formula(contract))
+    columns = formula_columns(units, contract)
+    unit = parsed.unit_expression()
+    if unit is None:
+        by_role = {source["role"]: source_name(source) for source in contract["scoring"]["sources"]}
+        if "prediction" in by_role and "target" in by_role:
+            unit = formula_lang.parse(f"{by_role['prediction']} == {by_role['target']}")
+        else:
+            return pd.Series(float("nan"), index=units.index, dtype="float64")
+    missing = [name for name in unit.inputs if name not in columns]
+    if missing:
+        raise MonitoringContractError(f"Нет входов формулы в единицах оценки: {missing}")
+    _check_blanks(columns, unit.inputs, contract["scoring"]["missing_policy"])
+    try:
+        return unit.evaluate_rows(columns).astype("float64")
+    except formula_lang.FormulaError as exc:
+        raise MonitoringContractError(f"Формула КМ: {exc}") from exc
 
 
 def score_units(units: pd.DataFrame, payload: dict) -> pd.Series:
+    return unit_scores(units, validate_monitoring_metric(payload))
+
+
+def aggregate_main_metric(frame: pd.DataFrame, payload: dict) -> dict[str, object]:
+    """КМ по единицам оценки той же формулой, что baseline на корзине.
+
+    Входы формулы — колонки контракта (разметка судьи + ответ агента). Если их
+    нет, а есть только построчный main_metric (старый выход ассесора), берётся
+    его среднее; формула в результате показывает, что именно посчитано.
+    """
     contract = validate_monitoring_metric(payload)
-    return pd.Series(
-        [float(score) if (score := _score_row(row, contract)) is not None else None for _, row in units.iterrows()],
-        index=units.index,
-        dtype="float64",
-    )
+    units = unitize(frame, contract)
+    policy = contract["scoring"]["missing_policy"]
+    weighted = contract["aggregation"]["method"] == "frequency_weighted_mean"
+    parsed = formula_lang.parse(contract_formula(contract))
+    columns = formula_columns(units, contract)
+    if any(name not in columns for name in parsed.inputs):
+        if "main_metric" not in units:
+            raise MonitoringContractError(
+                f"Нет входов формулы {list(parsed.inputs)} и нет main_metric для агрегации"
+            )
+        scores = pd.to_numeric(units["main_metric"], errors="coerce").astype("float64")
+        columns["main_metric"] = scores.fillna(0.0) if policy == "zero" else scores
+        parsed = formula_lang.parse(f"wmean(main_metric, {_WEIGHT})" if weighted else "mean(main_metric)")
+    _check_blanks(columns, parsed.inputs, policy)
+    try:
+        value = parsed.evaluate(columns)
+        unit = parsed.unit_expression()
+        scored = (
+            unit.evaluate_rows(columns).notna() if unit is not None
+            else pd.concat([columns[name] for name in parsed.inputs], axis=1).notna().all(axis=1)
+        )
+    except formula_lang.FormulaError as exc:
+        raise MonitoringContractError(f"Формула КМ: {exc}") from exc
+    if pd.isna(value) or not scored.any():
+        raise MonitoringContractError("Нет оцененных единиц")
+    weights = columns[_WEIGHT] if weighted else pd.Series(1.0, index=units.index)
+    return {
+        "name": contract["name"],
+        "value": float(value),
+        "formula": parsed.text,
+        "total_units": int(len(units)),
+        "scored_units": int(scored.sum()),
+        "excluded_units": int((~scored).sum()),
+        "weight_sum": float(weights[scored].sum()),
+    }
 
 
 def broadcast_scores(frame: pd.DataFrame, units: pd.DataFrame, scores: pd.Series) -> pd.DataFrame:
@@ -774,41 +835,3 @@ def prepare_drift_frames(
         _drift_frame(reference_umr, contract, require_target=True),
         _drift_frame(monitoring_umr, contract, require_target=False),
     )
-
-
-def aggregate_main_metric(frame: pd.DataFrame, payload: dict) -> dict[str, object]:
-    contract = validate_monitoring_metric(payload)
-    units = unitize(frame, contract)
-    if "main_metric" not in units:
-        raise MonitoringContractError("Нет main_metric для агрегации")
-    records: list[tuple[Decimal, Decimal]] = []
-    excluded = 0
-    policy = contract["scoring"]["missing_policy"]
-    weighted = contract["aggregation"]["method"] == "frequency_weighted_mean"
-    for _, row in units.iterrows():
-        if _blank(row["main_metric"]):
-            if policy == "fail":
-                raise MonitoringContractError("Пустой main_metric")
-            if policy == "zero":
-                score = Decimal(0)
-            else:
-                excluded += 1
-                continue
-        else:
-            score = _decimal(row["main_metric"], "main_metric")
-        weight = _decimal(row["input_query_count"], "input_query_count") if weighted else Decimal(1)
-        if weight <= 0:
-            raise MonitoringContractError("Вес должен быть положительным")
-        records.append((score, weight))
-    if not records:
-        raise MonitoringContractError("Нет оцененных единиц")
-    total_weight = sum((weight for _score, weight in records), Decimal(0))
-    value = sum((score * weight for score, weight in records), Decimal(0)) / total_weight
-    return {
-        "name": contract["name"],
-        "value": float(value),
-        "total_units": len(units),
-        "scored_units": len(records),
-        "excluded_units": excluded,
-        "weight_sum": float(total_weight),
-    }

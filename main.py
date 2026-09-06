@@ -18,17 +18,18 @@ from agent.config import ModelsConfig
 from agent.sds_chat_model import SdsChatModel
 from agent.score_results import AnswersProcessor, ResultsScorer
 from assessment_plan import (
-    CONTRACT_FORMULA,
     JudgePlan,
+    apply_judge_labels,
     build_judge_plan,
     judge_instruction,
+    prediction_source,
     score_judge_predictions,
-    source_by_role,
     source_observed,
 )
 from laim_monitoring import (
     MonitoringContractError,
     broadcast_scores,
+    contract_formula,
     normalize_umr,
     unitize,
     validate_monitoring_metric,
@@ -108,10 +109,10 @@ def _domain_path(value) -> str | None:
 
 
 def _assessment_frame(frame: pd.DataFrame, contract: dict) -> pd.DataFrame:
-    """Выровнять контекст accuracy по prediction эталона и monitoring."""
-    if contract["scoring"]["method"] != "accuracy":
+    """Судья видит как ответ агента его наблюдаемый prediction (класс/маршрут)."""
+    prediction = prediction_source(contract)
+    if prediction is None:
         return frame
-    prediction = source_by_role(contract, "prediction")
     column = prediction["column_name"]
     if not source_observed(frame, prediction):
         raise MonitoringContractError(
@@ -244,8 +245,10 @@ def _broadcast_predictions(
     units: pd.DataFrame,
     predictions: pd.DataFrame,
     scores: pd.Series,
+    plan: JudgePlan,
 ) -> pd.DataFrame:
     result = broadcast_scores(original, units, scores)
+    result = apply_judge_labels(result, units, predictions, plan)
     result["assessor_id"] = "judge"
     for column in predictions.columns:
         result[column] = None
@@ -369,7 +372,8 @@ def _assessment_result(
         "status": "computed",
         "assessment_mode": contract["assessment_mode"],
         "scoring_method": contract["scoring"]["method"],
-        # contract_formula: судья размечает источники, score считает формула
+        "formula": contract_formula(plan.contract),
+        # contract_formula: судья размечает входы формулы, КМ считает формула
         # контракта (та же, что у адаптера и km-dynamic). judge_final_score:
         # судья ставит готовый score, формула отчёта не воспроизводится.
         "scoring_semantics": plan.semantics,
@@ -477,15 +481,10 @@ def main(
     # весь запуск: калибровка и мониторинг обязаны измерять одно и то же.
     # Для accuracy prediction (класс агента) в эталоне есть всегда; на
     # мониторинге это свойство конвертера трейсов.
+    prediction = prediction_source(contract)
     prediction_observed = True
-    if contract["scoring"]["method"] == "accuracy" and stage in {"monitoring", "combined"}:
-        prediction = source_by_role(contract, "prediction")
+    if prediction is not None and stage in {"monitoring", "combined"}:
         prediction_observed = source_observed(monitoring_umr, prediction)
-        if not prediction_observed:
-            print(
-                f"monitoring: prediction {prediction['column_name']!r} недоступен в "
-                "UMR — судья оценивает output_answer, accuracy отчёта не воспроизводится"
-            )
     plan = build_judge_plan(contract, prediction_observed=prediction_observed)
     assessment_contract = plan.contract
     source_ids = list(plan.judge_source_ids)
@@ -533,10 +532,7 @@ def main(
         acc_auto = calibration_metrics["acc_auto"]
         scores = score_judge_predictions(test_units, predictions, plan)
         scored_output = _broadcast_predictions(
-            reference_umr,
-            test_units,
-            predictions,
-            scores,
+            reference_umr, test_units, predictions, scores, plan,
         )
         assessment_result = _assessment_result(
             contract,
@@ -549,9 +545,9 @@ def main(
     if stage in {"monitoring", "combined"} and monitoring_umr is not None:
         # Без наблюдаемого prediction (трейс не несёт класс агента) судья
         # оценивает сам output_answer — это уже учтено в plan (judge_final_score).
-        monitoring_assessment = monitoring_umr
-        if contract["scoring"]["method"] == "accuracy" and prediction_observed:
-            monitoring_assessment = _assessment_frame(monitoring_umr, contract)
+        monitoring_assessment = (
+            _assessment_frame(monitoring_umr, contract) if prediction_observed else monitoring_umr
+        )
         monitoring_units = _assessor_units(
             monitoring_assessment,
             assessment_contract,
@@ -572,10 +568,7 @@ def main(
         )
         scores = score_judge_predictions(monitoring_units, predictions, plan)
         scored_output = _broadcast_predictions(
-            monitoring_umr,
-            monitoring_units,
-            predictions,
-            scores,
+            monitoring_umr, monitoring_units, predictions, scores, plan,
         )
         assessment_result = _assessment_result(
             contract,

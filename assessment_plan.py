@@ -1,18 +1,17 @@
-"""Разделение ролей: что размечает судья и как из разметки считается score.
+"""Разделение ролей: что размечает судья и как из разметки считается КМ.
 
 Принцип: судья — оракул разметки, формула КМ — контракт `monitoring_metric`.
 Судья воспроизводит то, что в эталонной корзине проставлял человек (истинную
-метку, оценки по критериям, голос), а score единицы считает та же формула
-контракта, что у адаптера и km-dynamic (`laim_monitoring.score_units`).
+метку, оценки по критериям, голоса), его разметка записывается в те же колонки,
+что в корзине, и КМ считается той же формулой, что baseline, общим пакетом
+`laim_monitoring`. Ответ агента (роль prediction) судья не предсказывает — он
+наблюдается в UMR.
 
-Для `scoring.method=accuracy` это означает: судья предсказывает `target`
-(истинный класс запроса), `prediction` берётся из UMR (класс, который выдал
-агент), score = prediction == target. Готовый score судья ставит только там,
-где формулу применить нельзя:
+Готовый score судья ставит только там, где формулу применить нельзя:
 
-* prediction не наблюдается в monitoring UMR (трейс не несёт класс агента);
-* единица оценки — целый диалог (`assessment_mode=dialogue`), где источники
-  заданы один раз на диалог и судья оценивает разговор целиком.
+* формула использует prediction, а monitoring UMR его не несёт (трейс без
+  класса агента);
+* единица оценки — целый диалог (`assessment_mode=dialogue`).
 
 Семантика фиксируется в `assessment_result.scoring_semantics`, чтобы отчёт не
 выдавал «мнение судьи о правильности» за формулу отчёта о валидации.
@@ -25,7 +24,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from laim_monitoring import MonitoringContractError, score_units
+from laim_monitoring import MonitoringContractError, contract_formula, score_units
 
 CONTRACT_FORMULA = "contract_formula"
 JUDGE_FINAL_SCORE = "judge_final_score"
@@ -94,20 +93,30 @@ def _judge_score_contract(contract: dict) -> dict:
         "missing_policy": contract["scoring"]["missing_policy"],
         "majority_denominator": None,
     }
+    weighted = contract.get("aggregation", {}).get("method") == "frequency_weighted_mean"
+    result["formula"] = (
+        f"wmean({JUDGE_SCORE_SOURCE_ID}, weight)" if weighted else f"mean({JUDGE_SCORE_SOURCE_ID})"
+    )
     return result
+
+
+def prediction_source(contract: dict) -> dict | None:
+    return next(
+        (source for source in contract["scoring"]["sources"] if source["role"] == "prediction"),
+        None,
+    )
 
 
 def build_judge_plan(contract: dict, *, prediction_observed: bool = True) -> JudgePlan:
     """Выбрать, что судья размечает, чтобы формула контракта была применима.
 
-    `prediction_observed` — наблюдается ли prediction (класс агента) в UMR,
-    на котором пойдёт оценка. Для эталонной корзины он есть всегда; для
-    monitoring это свойство конвертера трейсов.
+    Судья предсказывает все входы формулы, кроме prediction (ответ агента
+    наблюдается). `prediction_observed` — есть ли prediction в UMR, на котором
+    пойдёт оценка: в эталонной корзине он есть всегда, на мониторинге это
+    свойство конвертера трейсов.
     """
-    scoring = contract["scoring"]
-    method = scoring["method"]
     mode = contract["assessment_mode"]
-
+    prediction = prediction_source(contract)
     if mode == "dialogue":
         return JudgePlan(
             contract=_judge_score_contract(contract),
@@ -118,34 +127,30 @@ def build_judge_plan(contract: dict, *, prediction_observed: bool = True) -> Jud
                 "формула контракта к диалогу не разложима по репликам"
             ),
         )
-    if method == "accuracy":
-        if not prediction_observed:
-            prediction = source_by_role(contract, "prediction")
-            return JudgePlan(
-                contract=_judge_score_contract(contract),
-                judge_source_ids=(JUDGE_SCORE_SOURCE_ID,),
-                semantics=JUDGE_FINAL_SCORE,
-                reason=(
-                    f"prediction {prediction['column_name']!r} не наблюдается в UMR: "
-                    "судья оценивает output_answer напрямую, accuracy отчёта не "
-                    "воспроизводится, сравнение с baseline информативное"
-                ),
-            )
-        target = source_by_role(contract, "target")
+    if prediction is not None and not prediction_observed:
         return JudgePlan(
-            contract=deepcopy(contract),
-            judge_source_ids=(target["source_id"],),
-            semantics=CONTRACT_FORMULA,
+            contract=_judge_score_contract(contract),
+            judge_source_ids=(JUDGE_SCORE_SOURCE_ID,),
+            semantics=JUDGE_FINAL_SCORE,
             reason=(
-                "accuracy: судья предсказывает истинную метку (target), "
-                "prediction берётся из UMR, score = prediction == target"
+                f"prediction {prediction['column_name']!r} не наблюдается в UMR: "
+                "судья оценивает output_answer напрямую, формула отчёта не "
+                "воспроизводится, сравнение с baseline информативное"
             ),
         )
+    judge_ids = tuple(
+        source["source_id"]
+        for source in contract["scoring"]["sources"]
+        if source["role"] != "prediction"
+    )
     return JudgePlan(
         contract=deepcopy(contract),
-        judge_source_ids=tuple(source["source_id"] for source in scoring["sources"]),
+        judge_source_ids=judge_ids,
         semantics=CONTRACT_FORMULA,
-        reason=f"{method}: судья размечает все источники контракта, score считает формула",
+        reason=(
+            "судья воспроизводит разметку корзины, КМ считает формула контракта: "
+            + contract_formula(contract)
+        ),
     )
 
 
@@ -160,10 +165,10 @@ def judge_instruction(plan: JudgePlan) -> str:
             f"- {source_id}: {_ROLE_INSTRUCTION.get(role, role)} "
             f"Исходная колонка корзины: {source['column_name']!r}."
         )
-    if plan.semantics == CONTRACT_FORMULA and plan.scoring_method == "accuracy":
+    if plan.semantics == CONTRACT_FORMULA and prediction_source(plan.contract) is not None:
         lines.append(
-            "Итоговая оценка НЕ запрашивается: она будет вычислена как совпадение "
-            "твоей истинной метки с классом, который выдал агент."
+            "Итоговая оценка НЕ запрашивается: КМ считается формулой "
+            f"{contract_formula(plan.contract)!r} по твоей разметке и ответу агента."
         )
     return "\n".join(lines)
 
@@ -192,3 +197,25 @@ def score_judge_predictions(
     if (~failed).any():
         scores.iloc[~failed] = score_units(values.iloc[~failed], plan.contract).to_numpy()
     return scores
+
+
+def apply_judge_labels(
+    frame: pd.DataFrame, units: pd.DataFrame, predictions: pd.DataFrame, plan: JudgePlan
+) -> pd.DataFrame:
+    """Записать разметку судьи в колонки контракта на строки UMR.
+
+    После этого scored_data содержит те же колонки, что эталонная корзина, но
+    с разметкой судьи, и km-dynamic считает КМ той же формулой, что baseline.
+    Сырые ответы судьи остаются в agent_<source_id>.
+    """
+    sources = {source["source_id"]: source for source in plan.contract["scoring"]["sources"]}
+    result = frame.copy()
+    for source_id in plan.judge_source_ids:
+        column = sources[source_id]["column_name"]
+        values = predictions[f"agent_{source_id}"].tolist()
+        result[column] = None
+        target = result.columns.get_loc(column)
+        for positions, value in zip(units["_row_positions"], values):
+            for position in positions:
+                result.iat[position, target] = value
+    return result

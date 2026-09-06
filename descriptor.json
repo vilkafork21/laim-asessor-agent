@@ -193,7 +193,8 @@
         "retriever/doc_loaders.py",
         "retriever/retriever.py",
         "laim_monitoring/__init__.py",
-        "laim_monitoring/core.py"
+        "laim_monitoring/core.py",
+        "laim_monitoring/formula.py"
       ],
       "libraryDependencies": [
         "requirements.txt"

@@ -15,6 +15,7 @@ from assessment_plan import (  # noqa: E402
     CONTRACT_FORMULA,
     JUDGE_FINAL_SCORE,
     JUDGE_SCORE_SOURCE_ID,
+    apply_judge_labels,
     build_judge_plan,
     judge_instruction,
     score_judge_predictions,
@@ -106,6 +107,7 @@ def test_accuracy_without_prediction_falls_back_to_judge_score_and_says_so():
     assert plan.contract["scoring"]["missing_policy"] == "exclude_unit"
     assert "класс_output_answer" in plan.reason
     assert "информативное" in plan.reason
+    assert plan.contract["formula"] == f"mean({JUDGE_SCORE_SOURCE_ID})"
 
 
 def test_criteria_methods_keep_contract_and_all_sources():
@@ -136,7 +138,7 @@ def test_instruction_explains_target_is_truth_not_grading():
     assert "ИСТИННАЯ метка" in text
     assert "НЕ оценка правильности" in text
     assert "source_1" not in text.split("\n")[1]
-    assert "будет вычислена как совпадение" in text
+    assert "mean(source_1 == source_2)" in text
 
 
 def test_instruction_lists_every_judge_field_for_criteria():
@@ -169,8 +171,10 @@ def test_accuracy_score_is_equality_of_judge_target_and_umr_prediction():
     assert scores.tolist()[:3] == [1.0, 0.0, 1.0]
     assert math.isnan(scores.tolist()[3])  # отказ судьи — не ноль
 
-    frame = broadcast_scores(umr, units, scores)
+    frame = apply_judge_labels(broadcast_scores(umr, units, scores), units, predictions, plan)
+    assert frame["класс_reference_answer"].tolist() == ["вклад", "Ипотека", "Ипотека", None]
     aggregate = aggregate_main_metric(frame, plan.contract)
+    assert aggregate["formula"] == "mean(source_1 == source_2)"
     assert aggregate["value"] == pytest.approx(2 / 3)
     assert aggregate["excluded_units"] == 1
 
@@ -207,3 +211,25 @@ def test_length_mismatch_is_contract_error():
         score_judge_predictions(
             units, pd.DataFrame({"agent_source_1": [1], "agent_source_2": [1]}), plan,
         )
+
+
+def test_explicit_formula_contract_judge_predicts_only_labels():
+    contract = _contract(
+        "formula",
+        [
+            _source("source_1", "класс_output_answer", "prediction", "label") | {"name": "prediction"},
+            _source("source_2", "класс_reference_answer", "target", "label") | {"name": "target"},
+        ],
+    )
+    contract["formula"] = 'f1(prediction, target, "macro")'
+    plan = build_judge_plan(contract, prediction_observed=True)
+    assert plan.judge_source_ids == ("source_2",)
+    assert "f1(prediction, target" in plan.reason
+    umr = _umr(класс_output_answer=["a", "a", "b"], класс_reference_answer=[None] * 3)
+    units = unitize(umr, plan.contract)
+    predictions = pd.DataFrame({"agent_source_2": ["a", "b", "b"]})
+    frame = apply_judge_labels(umr, units, predictions, plan)
+    aggregate = aggregate_main_metric(frame, plan.contract)
+    # a: tp=1 fp=1 fn=0 → F1=2/3; b: tp=1 fp=0 fn=1 → F1=2/3
+    assert aggregate["value"] == pytest.approx(2 / 3)
+    assert aggregate["formula"] == 'f1(prediction, target, "macro")'
