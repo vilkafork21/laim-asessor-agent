@@ -1,0 +1,30 @@
+{
+  "created_at": 1789238100.264533,
+  "model": "GigaChat-3-Pro",
+  "efforts": [
+    "low",
+    null
+  ],
+  "temperature": 0.8,
+  "top_p": 1,
+  "max_tokens": 8192,
+  "streaming": true,
+  "output": "text; complete final JSON; finish_reason=stop; original score schema",
+  "transport": {
+    "connect": 15,
+    "read": 300,
+    "max_connections": 1,
+    "keepalive": 120
+  },
+  "source_sha256": {
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/reasoning_round.py": "7e15b6106876a34d7d52e0fa88efa3a29f3b663ff7554159e70bb95348e05b4f",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/sdk_round.py": "6fdf9a9c2ec5944da2bee9ad09f5bb7101f5de357345ccbd3117da0275d7ec69",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/packet_round.py": "b8204f7074744b14ef04343d9b97d59d0e6a94ebadff3e6079443928625e21f4",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260911/cases/CI10071259.json": "7f6715675e1e36e016385187bb5db232b1ce2ac6b2d5398416fcc90ee0f9cb1e",
+    "/Users/antonzyukov/laim-judge-roles-20260912/agent/asessor_agent.py": "fcaf285c3a0926e795b6647fc76f3cdf0b41b51355b0026528c221f8e5019366",
+    "/Users/antonzyukov/laim-judge-roles-20260912/agent/prompts.py": "e16512414888fd7b65e1cd278fba40407108eeb526e2e9a4baefd1bd866de3fb",
+    "/Users/antonzyukov/laim-judge-roles-20260912/agent/pydantic_output.py": "8a3ac45ad79d1609547f908f28dda4b5acf3a3d60cb9e886e31d9c492b2fcaab",
+    "/Users/antonzyukov/laim-judge-roles-20260912/utils.py": "7206227982109b0cfd104a4f58bbe971e0127413ee343c0f5aa78bb61086bbb3"
+  },
+  "selection": "dev only, 63 fixed units; current test already historically seen, future result is internal validation; no claim of quality from incomplete arms"
+}

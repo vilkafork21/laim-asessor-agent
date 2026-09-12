@@ -1,0 +1,15 @@
+{
+  "stage": "before live dev",
+  "files_sha256": {
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/reference_round.py": "bc626064a16f67e36e164dacb91db8af9ff2d980f419ba774ed7f45f039c2bb8",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/sdk_round.py": "6fdf9a9c2ec5944da2bee9ad09f5bb7101f5de357345ccbd3117da0275d7ec69",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/packet_round.py": "b8204f7074744b14ef04343d9b97d59d0e6a94ebadff3e6079443928625e21f4",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260911/run_judge.py": "0f1f08e218399842360c3c27b5b213f1b6e22b74d861dfc6fadf6179500869d5",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260911/cases/CI10071259.json": "7f6715675e1e36e016385187bb5db232b1ce2ac6b2d5398416fcc90ee0f9cb1e"
+  },
+  "reference_model": "GigaChat-2-Max",
+  "judge_model": "GigaChat-3-Ultra",
+  "control": "roles_schema_packet_no_examples",
+  "failure_policy": "Если проект не сформирован или цитаты не прошли проверку, финальный judge получает исходные свидетельства без проекта. Неуспехи и стоимость первого этапа учитываются отдельно.",
+  "limitations": "Слепой к ответу проект использует те же инструментальные источники, а не независимые банковские факты; он может повторить ошибку инструмента."
+}

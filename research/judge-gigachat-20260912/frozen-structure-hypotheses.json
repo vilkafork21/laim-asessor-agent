@@ -1,0 +1,18 @@
+{
+  "stage": "dev hypotheses, before execution",
+  "source_sha256": {
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/focused_no_examples.py": "8ae88b8faea41380d3b66e6998affa4fb0e31f7a0460747b1535e084d2d95a8b",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/categorical_structure.py": "5148dd42ee88c290169261dcf8111b766f137c20f409696f40ff2f7380d288dd",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/structure_head.py": "7d2fdab3ab4f4b059a30e8e04da51b85c6eb4c3647d4d93487189f079fdc8457",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/sdk_round.py": "6fdf9a9c2ec5944da2bee9ad09f5bb7101f5de357345ccbd3117da0275d7ec69",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/CI10071255-structure.json": "4021369f9d8c8e126dac048a5787370242aaa2e5f3fe18e060fbbc9a58072c27",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260911/cases/CI10071259.json": "7f6715675e1e36e016385187bb5db232b1ce2ac6b2d5398416fcc90ee0f9cb1e"
+  },
+  "category_mapping": {
+    "logic_or_contradiction": 0,
+    "technical_noise_or_repeat": 1,
+    "no_violation": 2,
+    "not_assessable": null
+  },
+  "selection": "Сравнение полных dev-плеч по покрытию, согласованности, recall дефектов и FPR; test не используется для настройки. Гипотезы не объявляются победителями на частичном покрытии."
+}

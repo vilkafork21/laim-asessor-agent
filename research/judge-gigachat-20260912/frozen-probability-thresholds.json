@@ -1,0 +1,26 @@
+{
+  "fit_source_sha256": "24349f763945a00d6864ef32d58bd18c22bb085fdbb5ddd4faf1b540584cfddc",
+  "fit_partition": "dev",
+  "samples": 1,
+  "arm": "probability",
+  "primary_criterion": "structure",
+  "secondary_criteria": [
+    "factuality",
+    "completeness"
+  ],
+  "selection": "Пороги по всем доступным dev-прогнозам; исходное обоснование — предыдущий leave-one-group-out. Test не используется.",
+  "thresholds": {
+    "factuality": [
+      "-inf",
+      1.975
+    ],
+    "completeness": [
+      0.6499999999999999,
+      1.55
+    ],
+    "structure": [
+      "-inf",
+      1.975
+    ]
+  }
+}

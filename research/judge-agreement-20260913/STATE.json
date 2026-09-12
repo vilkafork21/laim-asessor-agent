@@ -1,0 +1,16 @@
+{
+  "status": "PREPARED_BEFORE_API",
+  "date": "2026-09-13",
+  "source_sha256": {
+    "research/judge-agreement-20260913/anchor_experiment.py": "58836e020277e1e54306130206b6c3cf358059504ee079c36e36505f93f76b63",
+    "agent/asessor_agent.py": "fcaf285c3a0926e795b6647fc76f3cdf0b41b51355b0026528c221f8e5019366",
+    "agent/prompts.py": "e16512414888fd7b65e1cd278fba40407108eeb526e2e9a4baefd1bd866de3fb",
+    "agent/pydantic_output.py": "8a3ac45ad79d1609547f908f28dda4b5acf3a3d60cb9e886e31d9c492b2fcaab",
+    "agent/score_results.py": "7649755cddf5a8cbc7428383f256f5613d9b03dd264fc2ccff3f1d42e3e49d6f",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/sdk-predictions.json": "8602ee64a1854cede3f219e3a1fe53cb0926d32cee241b720c088c223369cdc3",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/agreement-diagnostics.json": "bfa31a2e1bb6aea106ef35041843195aa89557c6c5bf55b37d3b8c9293b4fbb8",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/CI10071255-structure.json": "4021369f9d8c8e126dac048a5787370242aaa2e5f3fe18e060fbbc9a58072c27",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260911/cases/CI10071259.json": "7f6715675e1e36e016385187bb5db232b1ce2ac6b2d5398416fcc90ee0f9cb1e"
+  },
+  "raw_artifacts": "Вне Git; запросы и ответы не коммитятся."
+}

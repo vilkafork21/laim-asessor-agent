@@ -1,0 +1,12 @@
+{
+  "stage": "before complete online observed dev and before test",
+  "route": "Использовать observed, если text_checks.whole_answer_repeated_twice или непустой raw_technical_tokens; иначе categorical. Маршрут зависит только от текста текущего ответа, не от gold, доступности оценки или значений предсказаний.",
+  "default_arm": "roles_schema_structure_categorical_no_examples_max",
+  "observed_arm": "roles_schema_structure_observed_no_examples_max",
+  "source_sha256": {
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/observed_structure.py": "9bd7716cc7fed3b554bc557f161b2681a488e22f9d8c0f07a112ba97656d9b73",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/categorical_structure.py": "5148dd42ee88c290169261dcf8111b766f137c20f409696f40ff2f7380d288dd",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/sdk_round.py": "6fdf9a9c2ec5944da2bee9ad09f5bb7101f5de357345ccbd3117da0275d7ec69"
+  },
+  "motivation": "Полный PST dev показал потерю единственного обнаруженного дефекта при безусловных наблюдениях, тогда как шесть дублирований распознаются с правильным чистым контролем. Проверяется условное применение без изменения исходных оценок."
+}

@@ -1,0 +1,15 @@
+{
+  "stage": "before API",
+  "source_sha256": {
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/observed_structure.py": "9bd7716cc7fed3b554bc557f161b2681a488e22f9d8c0f07a112ba97656d9b73",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/categorical_structure.py": "5148dd42ee88c290169261dcf8111b766f137c20f409696f40ff2f7380d288dd",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/sdk_round.py": "6fdf9a9c2ec5944da2bee9ad09f5bb7101f5de357345ccbd3117da0275d7ec69",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/structure_head.py": "7d2fdab3ab4f4b059a30e8e04da51b85c6eb4c3647d4d93487189f079fdc8457"
+  },
+  "sequence": [
+    "CI10071259 dev63",
+    "six predefined duplicate-answer stresses",
+    "CI10071255 dev214"
+  ],
+  "mapping": "Баллы определяет GigaChat; детерминированно передаются только полное повторение и позиции сырых технических токенов."
+}

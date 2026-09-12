@@ -1,0 +1,9 @@
+{
+  "stage": "before API",
+  "source_sha256": {
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/reference_ids.py": "93e483f941925840e1d9d30e9b0f65fac8c234f4b8b56714963b1199fd14a397",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/reference_round.py": "bc626064a16f67e36e164dacb91db8af9ff2d980f419ba774ed7f45f039c2bb8",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260911/round3.py": "bb6adca979ad3222fb749201fedb82955707a10a9bb3eed6cf7b172463e1f950"
+  },
+  "changes": "Короткие ссылки E0/E1 с enum и обратной картой; разбор представленных словарями/списками tool contents существующим decoded_unit; имена инструментов и аргументы сохраняются. Дословные цитаты из ответа модели не требуются. Ссылки проверяются формально, истинность утверждений должен проверить конечный judge."
+}

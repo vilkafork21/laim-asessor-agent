@@ -1,0 +1,11 @@
+{
+  "source_sha256": {
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/reasoning_budget.py": "e0f01bc47123577787f9ea296699e12f57d2df3399b83e5b6393787d6374b0e9",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/reasoning_round.py": "7e15b6106876a34d7d52e0fa88efa3a29f3b663ff7554159e70bb95348e05b4f"
+  },
+  "model": "GigaChat-3-Ultra",
+  "max_tokens": 16384,
+  "effort": "low",
+  "first_stage": "2 fixed earliest dev units, followed by full dev only if operational smoke succeeds",
+  "motivation": "В девяти исчерпаниях прежнего Pro/8192 нет выраженного повторения одинаковых 12-грамм; это не доказывает зацикливание. Проверяется больший бюджет наиболее сильной доступной модели."
+}

@@ -1,0 +1,33 @@
+{
+  "agent": "CI10071259",
+  "routes": {
+    "factuality": [
+      "roles_schema_giga2_max",
+      "contrastive_comments_aligned_parser",
+      "roles_schema_packet_no_examples"
+    ],
+    "completeness": [
+      "roles_schema_giga2_max",
+      "contrastive_comments_aligned_parser",
+      "roles_schema_packet_no_examples"
+    ],
+    "structure": [
+      "contrastive_comments_aligned_parser",
+      "roles_schema_packet_no_examples"
+    ]
+  },
+  "selection_partition": "dev",
+  "validation": "Полный прежний test 201 и отдельный срез без раскрытых рубрикой групп 181; внутренняя валидация.",
+  "selection": "Пять заранее перечисленных dev-replay каскадов; Max выбран для фактичности/полноты, reviewer с train-feedback для структуры. Переключение только при отсутствии оценки, без текущих человеческих меток.",
+  "source_sha256": {
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/run_cascade.py": "27f850c4795f60d2106d0ef1e536d749166495d19ead9987bb674fb6ef90919a",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/sdk_round.py": "6fdf9a9c2ec5944da2bee9ad09f5bb7101f5de357345ccbd3117da0275d7ec69",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/round4.py": "7b19a093085937e0de755ac80911a501c1c435664075f9ffa5eead35e9fde523",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/analyze_round4.py": "1102e92698056ad01aa6fb9515afec20b7f18904dc1076350556978bf08125c5",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/packet_round.py": "b8204f7074744b14ef04343d9b97d59d0e6a94ebadff3e6079443928625e21f4",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260911/run_judge.py": "0f1f08e218399842360c3c27b5b213f1b6e22b74d861dfc6fadf6179500869d5",
+    "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260911/round3.py": "bb6adca979ad3222fb749201fedb82955707a10a9bb3eed6cf7b172463e1f950",
+    "/Users/antonzyukov/laim-judge-roles-20260912/agent/asessor_agent.py": "fcaf285c3a0926e795b6647fc76f3cdf0b41b51355b0026528c221f8e5019366",
+    "/Users/antonzyukov/laim-judge-roles-20260912/agent/prompts.py": "e16512414888fd7b65e1cd278fba40407108eeb526e2e9a4baefd1bd866de3fb"
+  }
+}
