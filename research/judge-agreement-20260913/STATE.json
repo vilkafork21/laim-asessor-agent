@@ -46,5 +46,18 @@
       "LogisticRegression C=1 balanced"
     ],
     "exclusion": "Все клиентские компоненты dev удалены из train до использования меток; test не читается в payload или fit."
+  },
+  "execution_states": {
+    "anchor": "COMPLETED_REJECTED",
+    "nearest": "COMPLETED_REJECTED",
+    "features": "SMOKE_RUNNING",
+    "new_request_records_before_features": 831,
+    "metrics_sha256": {
+      "pst-anchor-metrics.json": "f86f295c600dd5098b3c31a371f0cd5479bc93ea3a978d583ed6d2b97f16c11e",
+      "online-anchor-metrics.json": "8c5837e4190163514fd9942d6bcf72e6df48a869457a7ee0d45dccdb9bbe5a1f",
+      "pst-nearest-metrics.json": "d7b0f14fdcaff11a3d4880e155ac81603fa0121c5faf27e8d14ecf2b7a3d780f",
+      "online-nearest-metrics.json": "90eabc02bad1331863ae03f3a3fab9dcd31499ad96600efee04a36cb9ae8faaf",
+      "pst-nearest-overrides.json": "d810eaab2af282d2b65c7318f0ce7f8af6ecae881dbde91d54e117819c6bda85"
+    }
   }
 }
