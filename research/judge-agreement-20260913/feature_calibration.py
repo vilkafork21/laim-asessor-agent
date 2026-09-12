@@ -113,13 +113,16 @@ async def run(args: argparse.Namespace) -> None:
         assessment_score=(judge._output_model.model_fields['assessment_score'].rebuild_annotation(), Field(description='Исходный балл структуры')))
     instruction = SYSTEM.replace('null.', '-1.') if args.schema_style == 'flat' else SYSTEM
     judge.printing_chain = ChatPromptTemplate.from_messages([SystemMessage(content=instruction+'\nРУБРИКА:\n'+case['rubric']), ('human', '{payload}')])
-    judge.agent_chain = judge.printing_chain | llm.with_structured_output(judge._output_model, method='json_schema', strict=True)
+    judge.agent_chain = judge.printing_chain | llm.with_structured_output(judge._output_model, method=args.output_method,
+        **({'strict': True} if args.output_method == 'json_schema' else {}))
     records = {}
     units = (train+dev)[:args.limit] if args.limit else train+dev
     for number, unit in enumerate(units, 1):
         payload = {'assessment_context': context(unit)}
         request = {'messages': [m.model_dump(mode='json') for m in judge.printing_chain.invoke(_serialize_llm_record(payload)).to_messages()],
                    'schema': judge._output_model.model_json_schema(), 'model': llm.model, 'temperature': .001, 'top_p': .001, 'max_tokens': 1000}
+        if args.output_method != 'json_schema':
+            request['output_method'] = args.output_method
         identity = hashlib.sha256(canonical([request, unit['unit_id']]).encode()).hexdigest()
         path = args.output / f'{identity}.json'
         if path.exists():
@@ -151,6 +154,7 @@ if __name__ == '__main__':
         parser.add_argument('--'+name, type=Path, required=True)
     parser.add_argument('--limit', type=int, default=0)
     parser.add_argument('--schema-style', choices=['nullable', 'flat'], default='nullable')
+    parser.add_argument('--output-method', choices=['json_schema', 'function_calling'], default='json_schema')
     arguments = parser.parse_args()
     if arguments.output.resolve().is_relative_to(ROOT):
         raise ValueError('Запросы, ответы и калибратор сохраняются вне Git')

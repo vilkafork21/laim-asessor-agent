@@ -50,7 +50,7 @@
   "execution_states": {
     "anchor": "COMPLETED_REJECTED",
     "nearest": "COMPLETED_REJECTED",
-    "features": "NULLABLE_SMOKE_FAILED_FLAT_PREPARED",
+    "features": "JSON_SMOKES_FAILED_FUNCTION_PREPARED",
     "new_request_records_before_features": 831,
     "metrics_sha256": {
       "pst-anchor-metrics.json": "f86f295c600dd5098b3c31a371f0cd5479bc93ea3a978d583ed6d2b97f16c11e",
@@ -68,5 +68,14 @@
     "nullable_smoke": "0/4 valid; transport and malformed JSON",
     "smoke_units": "Same first four train units",
     "unknown_value": -1
+  },
+  "function_feature_protocol": {
+    "status": "PREPARED_BEFORE_API",
+    "source_sha256": {
+      "feature_calibration.py": "c4a863c1006e52cd7069bd572e42fe546c81048c6127fef1edfc9acc087f2d9c"
+    },
+    "flat_json_smoke": "0/4 valid; malformed JSON",
+    "smoke_units": "Same first four train units",
+    "output_method": "function_calling"
   }
 }
