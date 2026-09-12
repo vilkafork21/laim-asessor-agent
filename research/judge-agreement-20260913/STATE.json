@@ -50,7 +50,7 @@
   "execution_states": {
     "anchor": "COMPLETED_REJECTED",
     "nearest": "COMPLETED_REJECTED",
-    "features": "FUNCTION_LOCAL_CONTRACT_FIXED_BEFORE_API",
+    "features": "FUNCTION_SMOKE_4_OF_4_FULL_PST_RUNNING",
     "new_request_records_before_features": 831,
     "metrics_sha256": {
       "pst-anchor-metrics.json": "f86f295c600dd5098b3c31a371f0cd5479bc93ea3a978d583ed6d2b97f16c11e",
