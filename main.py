@@ -420,10 +420,10 @@ def _calibrate(
     metrics["admission_reason"] = admission.reason
     logger.info(
         "calibration: acc_auto=%s, baseline по моде=%s, каппа Коэна=%s, "
-        "альфа Криппендорфа=%s, корреляция Спирмана=%s, полнота на дефектах=%s, "
+        "альфа Криппендорфа nominal=%s, ordinal=%s, корреляция Спирмана=%s, полнота на дефектах=%s, "
         "точность на дефектах=%s, смещение судьи=%s, допуск=%s (%s)",
         metrics["acc_auto"], metrics["baseline_mode_accuracy"], metrics["cohen_kappa"],
-        metrics["krippendorff_alpha"], metrics["spearman_correlation"],
+        metrics["krippendorff_alpha"], metrics["krippendorff_alpha_ordinal"], metrics["spearman_correlation"],
         metrics["defect_recall"], metrics["defect_precision"], metrics["bias_mean"],
         admission.status, admission.reason,
     )

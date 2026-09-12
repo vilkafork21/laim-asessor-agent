@@ -166,3 +166,36 @@ def test_error_profile_distinguishes_false_alarms_and_ordinal_distance():
     assert result['label_confusion'] == {
         'labels': [0., 1., 2.], 'human_rows_judge_columns': [[0, 0, 1], [0, 1, 0], [1, 0, 1]],
     }
+
+
+def test_ordinal_agreement_uses_score_order_and_explains_nominal_kappa():
+    import pytest
+
+    frame = pd.DataFrame({'score': [0., 0., 1., 2.], 'agent_score': [2., 0., 1., 2.]})
+    result = score_results(frame, 'score', defect_threshold=2, higher_is_better=True)
+    # Пул частот 3/2/3: Do=25/4, De=75/7 на порядковых расстояниях.
+    assert result['krippendorff_alpha_ordinal'] == pytest.approx(5 / 12)
+    assert result['krippendorff_alpha'] == pytest.approx(2 / 3)
+    assert result['chance_agreement'] == 5 / 16
+    assert result['cohen_kappa'] == pytest.approx(7 / 11)
+    shuffled = score_results(frame.iloc[::-1], 'score', defect_threshold=2, higher_is_better=True)
+    assert shuffled['krippendorff_alpha_ordinal'] == result['krippendorff_alpha_ordinal']
+
+
+def test_constant_judge_does_not_turn_undefined_spearman_into_zero():
+    frame = pd.DataFrame({'score': [0., 1., 2., 2.], 'agent_score': [2., 2., 2., None]})
+    result = score_results(frame, 'score', defect_threshold=2, higher_is_better=True)
+    assert result['spearman_correlation'] is None
+    assert result['spearman_undefined_reason'] == 'constant_judge'
+    assert result['correct_label_yield'] == .25
+    assert result['chance_agreement'] == 1 / 3
+    assert result['cohen_kappa'] == 0
+
+
+def test_absent_pairs_have_no_ordinal_agreement():
+    frame = pd.DataFrame({'score': [0., 2.], 'agent_score': [None, None]})
+    result = score_results(frame, 'score', defect_threshold=2, higher_is_better=True)
+    assert result['krippendorff_alpha_ordinal'] is None
+    assert result['chance_agreement'] is None
+    assert result['correct_label_yield'] == 0
+    assert result['spearman_undefined_reason'] == 'insufficient_pairs'
