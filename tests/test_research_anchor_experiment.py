@@ -122,3 +122,11 @@ def test_temperature_control_omits_top_p_without_changing_default(monkeypatch):
     parameters = features.generation_parameters(True)
     assert parameters == {'temperature': .001}
     assert GigaChat(credentials='unused', **parameters).top_p is None
+
+
+def test_embedding_pool_preserves_chunk_weights(monkeypatch):
+    monkeypatch.syspath_prepend(str(path.parent))
+    import embedding_baseline as baseline
+    import numpy as np
+    np.testing.assert_allclose(baseline.pool([[1, 0], [0, 1]], [1, 3]), np.array([1, 3]) / np.sqrt(10))
+    assert baseline.normalized_answer({'context': {'current_turn': {'output_answer': '  Ответ\nДА '}}}) == 'ответ да'

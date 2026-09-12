@@ -50,15 +50,18 @@
   "execution_states": {
     "anchor": "COMPLETED_REJECTED",
     "nearest": "COMPLETED_REJECTED",
-    "features": "FUNCTION_SMOKE_4_OF_4_FULL_PST_RUNNING",
+    "features": "PST_COMPLETED_REJECTED_ONLINE_RUNNING",
     "new_request_records_before_features": 831,
     "metrics_sha256": {
       "pst-anchor-metrics.json": "f86f295c600dd5098b3c31a371f0cd5479bc93ea3a978d583ed6d2b97f16c11e",
       "online-anchor-metrics.json": "8c5837e4190163514fd9942d6bcf72e6df48a869457a7ee0d45dccdb9bbe5a1f",
       "pst-nearest-metrics.json": "d7b0f14fdcaff11a3d4880e155ac81603fa0121c5faf27e8d14ecf2b7a3d780f",
       "online-nearest-metrics.json": "90eabc02bad1331863ae03f3a3fab9dcd31499ad96600efee04a36cb9ae8faaf",
-      "pst-nearest-overrides.json": "d810eaab2af282d2b65c7318f0ce7f8af6ecae881dbde91d54e117819c6bda85"
-    }
+      "pst-nearest-overrides.json": "d810eaab2af282d2b65c7318f0ce7f8af6ecae881dbde91d54e117819c6bda85",
+      "feature-function-CI10071259": "bd7a7bd5c8853104f9dec7b3ddbfb6ad9585aa4cb55dff19e7b5527552702c23"
+    },
+    "temperature": "COMPLETED_0_OF_4_MALFORMED_JSON",
+    "embedding": "PREPARED"
   },
   "flat_feature_protocol": {
     "status": "PREPARED_BEFORE_API",
@@ -96,5 +99,21 @@
     "schema_style": "nullable",
     "output_method": "json_schema",
     "smoke_units": "Same first four train units after active full PST"
+  },
+  "embedding_protocol": {
+    "status": "PREPARED_BEFORE_LOCAL_INFERENCE",
+    "source_sha256": {
+      "embedding_baseline.py": "de89c7b7b610e83bfc7282e7ef047274abbf496496c3166a2df5ee889d2c5f0a",
+      "model.safetensors": "9ce03c6c5ae02baebb42ce3015b6f3e628c5fec7b7745bc2490f6ff961a654a5"
+    },
+    "profiles": [
+      "train_mode",
+      "cosine_k1",
+      "cosine_k3",
+      "logistic_C10_unweighted",
+      "logistic_C10_balanced"
+    ],
+    "model": "Giga-Embeddings-instruct-480M-0826 local",
+    "scope": "Диагностика, не эквивалент production GigaChat API"
   }
 }
