@@ -22,5 +22,29 @@
       "pst-retrieval.json": "fcf59c71255a3629544fd38fd4cfddf811b9b76a0bf72fd73ab2c74f045e2d33",
       "online-retrieval.json": "c58da49a09c55f928e6ebbbef6ec0cc7879e226a4366e38a2283cc7569f86054"
     }
+  },
+  "feature_protocol": {
+    "status": "PREPARED_BEFORE_API",
+    "source_sha256": {
+      "feature_calibration.py": "12aa5a51dd9987cf762e97d59bc1567da9a1e44d97b4efaa4d262b6eebf054ab"
+    },
+    "counts": {
+      "CI10071259": {
+        "eligible_train": 150,
+        "dev": 63,
+        "train_client_components": 9
+      },
+      "CI10071255": {
+        "eligible_train": 498,
+        "dev": 214,
+        "train_client_components": 466
+      }
+    },
+    "model": "GigaChat-2-Max",
+    "calibrators": [
+      "LogisticRegression C=1 unweighted",
+      "LogisticRegression C=1 balanced"
+    ],
+    "exclusion": "Все клиентские компоненты dev удалены из train до использования меток; test не читается в payload или fit."
   }
 }

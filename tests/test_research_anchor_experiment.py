@@ -56,3 +56,29 @@ def test_nearest_anchor_uses_answer_and_excludes_client(monkeypatch):
     groups = {'0': 'a', '1': 'b', '2': 'c', 'query': 'a'}
     assert nearest.answer_tokens(query) == ['текст', 'ответа']
     assert nearest.select(train, query, [10, 2, 1], groups) == [train[1]]
+
+
+def test_feature_calibration_train_excludes_dev_clients_and_test(monkeypatch, tmp_path):
+    import json
+    monkeypatch.syspath_prepend(str(path.parent))
+    spec = importlib.util.spec_from_file_location('feature_calibration', path.with_name('feature_calibration.py'))
+    features = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(features)
+    units = [{'unit_id': name, 'partition': role, 'ratings': [{'scores': {'structure': 2}}]}
+             for name, role in [('a', 'train'), ('b', 'train'), ('c', 'dev'), ('d', 'test')]]
+    selected = features.training_units(units, {'a': 'shared', 'b': 'independent', 'c': 'shared', 'd': 'test'})
+    assert [u['unit_id'] for u in selected] == ['b']
+    assert features.feature_values({key: None for key in features.FEATURES}) == [-1] * len(features.FEATURES)
+    train, dev = [units[0], units[1]], [units[2]]
+    train[0]['ratings'][0]['scores']['structure'] = 0
+    records = {u['unit_id']: {'status': 'ok', 'result': {
+        **{key: value for key in features.FEATURES}, 'assessment_score': 2}}
+        for u, value in zip(train+dev, [0, 4, 2])}
+    output = tmp_path / 'metrics.json'
+    features.evaluate(train, dev, records, output)
+    before = json.loads(output.read_text())
+    dev[0]['ratings'][0]['scores']['structure'] = 0
+    features.evaluate(train, dev, records, output)
+    after = json.loads(output.read_text())
+    assert before['fits'] == after['fits']
+    assert before['predictions'] == after['predictions']
