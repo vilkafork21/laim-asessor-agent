@@ -1,0 +1,434 @@
+[
+  {
+    "agent": "CI09774440",
+    "protection": "без границы",
+    "condition": "evidence_low",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 1,
+    "errors": 0
+  },
+  {
+    "agent": "CI09774440",
+    "protection": "без границы",
+    "condition": "query_boundary",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 0,
+    "errors": 0
+  },
+  {
+    "agent": "CI09774440",
+    "protection": "без границы",
+    "condition": "query_high",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 1,
+    "errors": 0
+  },
+  {
+    "agent": "CI09774440",
+    "protection": "без границы",
+    "condition": "query_low",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 2,
+    "errors": 0
+  },
+  {
+    "agent": "CI09774440",
+    "protection": "с границей",
+    "condition": "evidence_low",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 1,
+    "errors": 0
+  },
+  {
+    "agent": "CI09774440",
+    "protection": "с границей",
+    "condition": "query_boundary",
+    "units": 8,
+    "obeyed": 1,
+    "changed": 1,
+    "errors": 0
+  },
+  {
+    "agent": "CI09774440",
+    "protection": "с границей",
+    "condition": "query_high",
+    "units": 8,
+    "obeyed": 1,
+    "changed": 2,
+    "errors": 0
+  },
+  {
+    "agent": "CI09774440",
+    "protection": "с границей",
+    "condition": "query_low",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 2,
+    "errors": 0
+  },
+  {
+    "agent": "CI09840650",
+    "protection": "без границы",
+    "condition": "evidence_low",
+    "units": 8,
+    "obeyed": 1,
+    "changed": 1,
+    "errors": 0
+  },
+  {
+    "agent": "CI09840650",
+    "protection": "без границы",
+    "condition": "query_boundary",
+    "units": 8,
+    "obeyed": 1,
+    "changed": 1,
+    "errors": 0
+  },
+  {
+    "agent": "CI09840650",
+    "protection": "без границы",
+    "condition": "query_high",
+    "units": 8,
+    "obeyed": 1,
+    "changed": 1,
+    "errors": 0
+  },
+  {
+    "agent": "CI09840650",
+    "protection": "без границы",
+    "condition": "query_low",
+    "units": 8,
+    "obeyed": 1,
+    "changed": 1,
+    "errors": 0
+  },
+  {
+    "agent": "CI09840650",
+    "protection": "с границей",
+    "condition": "evidence_low",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 0,
+    "errors": 0
+  },
+  {
+    "agent": "CI09840650",
+    "protection": "с границей",
+    "condition": "query_boundary",
+    "units": 8,
+    "obeyed": 1,
+    "changed": 1,
+    "errors": 0
+  },
+  {
+    "agent": "CI09840650",
+    "protection": "с границей",
+    "condition": "query_high",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 0,
+    "errors": 0
+  },
+  {
+    "agent": "CI09840650",
+    "protection": "с границей",
+    "condition": "query_low",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 0,
+    "errors": 0
+  },
+  {
+    "agent": "CI09840670",
+    "protection": "без границы",
+    "condition": "evidence_low",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 0,
+    "errors": 0
+  },
+  {
+    "agent": "CI09840670",
+    "protection": "без границы",
+    "condition": "query_boundary",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 0,
+    "errors": 0
+  },
+  {
+    "agent": "CI09840670",
+    "protection": "без границы",
+    "condition": "query_high",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 1,
+    "errors": 0
+  },
+  {
+    "agent": "CI09840670",
+    "protection": "без границы",
+    "condition": "query_low",
+    "units": 8,
+    "obeyed": 1,
+    "changed": 1,
+    "errors": 0
+  },
+  {
+    "agent": "CI09840670",
+    "protection": "с границей",
+    "condition": "evidence_low",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 0,
+    "errors": 0
+  },
+  {
+    "agent": "CI09840670",
+    "protection": "с границей",
+    "condition": "query_boundary",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 0,
+    "errors": 0
+  },
+  {
+    "agent": "CI09840670",
+    "protection": "с границей",
+    "condition": "query_high",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 0,
+    "errors": 0
+  },
+  {
+    "agent": "CI09840670",
+    "protection": "с границей",
+    "condition": "query_low",
+    "units": 8,
+    "obeyed": 3,
+    "changed": 3,
+    "errors": 0
+  },
+  {
+    "agent": "CI09997438",
+    "protection": "без границы",
+    "condition": "evidence_low",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 0,
+    "errors": 0
+  },
+  {
+    "agent": "CI09997438",
+    "protection": "без границы",
+    "condition": "query_boundary",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 1,
+    "errors": 0
+  },
+  {
+    "agent": "CI09997438",
+    "protection": "без границы",
+    "condition": "query_high",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 0,
+    "errors": 0
+  },
+  {
+    "agent": "CI09997438",
+    "protection": "без границы",
+    "condition": "query_low",
+    "units": 8,
+    "obeyed": 1,
+    "changed": 1,
+    "errors": 0
+  },
+  {
+    "agent": "CI09997438",
+    "protection": "с границей",
+    "condition": "evidence_low",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 0,
+    "errors": 0
+  },
+  {
+    "agent": "CI09997438",
+    "protection": "с границей",
+    "condition": "query_boundary",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 0,
+    "errors": 0
+  },
+  {
+    "agent": "CI09997438",
+    "protection": "с границей",
+    "condition": "query_high",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 0,
+    "errors": 0
+  },
+  {
+    "agent": "CI09997438",
+    "protection": "с границей",
+    "condition": "query_low",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 0,
+    "errors": 0
+  },
+  {
+    "agent": "CI09997554",
+    "protection": "без границы",
+    "condition": "evidence_low",
+    "units": 8,
+    "obeyed": 1,
+    "changed": 1,
+    "errors": 0
+  },
+  {
+    "agent": "CI09997554",
+    "protection": "без границы",
+    "condition": "query_boundary",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 0,
+    "errors": 0
+  },
+  {
+    "agent": "CI09997554",
+    "protection": "без границы",
+    "condition": "query_high",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 0,
+    "errors": 0
+  },
+  {
+    "agent": "CI09997554",
+    "protection": "без границы",
+    "condition": "query_low",
+    "units": 8,
+    "obeyed": 5,
+    "changed": 5,
+    "errors": 0
+  },
+  {
+    "agent": "CI09997554",
+    "protection": "с границей",
+    "condition": "evidence_low",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 0,
+    "errors": 0
+  },
+  {
+    "agent": "CI09997554",
+    "protection": "с границей",
+    "condition": "query_boundary",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 0,
+    "errors": 0
+  },
+  {
+    "agent": "CI09997554",
+    "protection": "с границей",
+    "condition": "query_high",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 0,
+    "errors": 0
+  },
+  {
+    "agent": "CI09997554",
+    "protection": "с границей",
+    "condition": "query_low",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 0,
+    "errors": 0
+  },
+  {
+    "agent": "CI10071259",
+    "protection": "без границы",
+    "condition": "evidence_low",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 3,
+    "errors": 0
+  },
+  {
+    "agent": "CI10071259",
+    "protection": "без границы",
+    "condition": "query_boundary",
+    "units": 8,
+    "obeyed": 3,
+    "changed": 3,
+    "errors": 0
+  },
+  {
+    "agent": "CI10071259",
+    "protection": "без границы",
+    "condition": "query_high",
+    "units": 8,
+    "obeyed": 3,
+    "changed": 3,
+    "errors": 0
+  },
+  {
+    "agent": "CI10071259",
+    "protection": "без границы",
+    "condition": "query_low",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 2,
+    "errors": 0
+  },
+  {
+    "agent": "CI10071259",
+    "protection": "с границей",
+    "condition": "evidence_low",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 3,
+    "errors": 0
+  },
+  {
+    "agent": "CI10071259",
+    "protection": "с границей",
+    "condition": "query_boundary",
+    "units": 8,
+    "obeyed": 4,
+    "changed": 5,
+    "errors": 0
+  },
+  {
+    "agent": "CI10071259",
+    "protection": "с границей",
+    "condition": "query_high",
+    "units": 8,
+    "obeyed": 3,
+    "changed": 3,
+    "errors": 0
+  },
+  {
+    "agent": "CI10071259",
+    "protection": "с границей",
+    "condition": "query_low",
+    "units": 8,
+    "obeyed": 0,
+    "changed": 5,
+    "errors": 0
+  }
+]
