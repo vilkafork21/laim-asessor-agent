@@ -96,3 +96,19 @@ def test_flat_feature_schema_has_only_bounded_enum(monkeypatch):
     import pytest
     with pytest.raises(ValueError):
         model.model_validate({key: 5 for key in features.FEATURES})
+
+
+def test_feature_function_schema_uses_existing_gigachat_scale_adapter(monkeypatch):
+    monkeypatch.syspath_prepend(str(path.parent))
+    import feature_calibration as features
+    from agent.pydantic_output import create_simple_output_model
+    from langchain_gigachat.utils.function_calling import convert_pydantic_to_gigachat_function
+    from gigachat.models import Function
+    score = create_simple_output_model(['assessment_score'], [0, 1, 2]).model_fields['assessment_score'].rebuild_annotation()
+    model = features.feature_model(score, 'flat', 'function_calling')
+    definition = convert_pydantic_to_gigachat_function(model)
+    assert Function.model_validate(definition).description
+    result = model.model_validate({**{key: '4' for key in features.FEATURES},
+        'assessment_reason': 'Проверка', 'assessment_score': '2'})
+    assert features.feature_values(result.model_dump()) == [4] * len(features.FEATURES)
+    assert result.assessment_score == 2

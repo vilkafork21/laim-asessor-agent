@@ -24,6 +24,7 @@ from sklearn.linear_model import LogisticRegression
 from anchor_experiment import ROOT, Asessor, Recorder, _serialize_llm_record, canonical, consensus, context
 from audit_agreement import audit
 from agent.score_results import score_results
+from agent.pydantic_output import create_simple_output_model
 
 FEATURES = {
     'internal_consistency': 'Нет противоречий между утверждениями самого ответа',
@@ -54,6 +55,17 @@ def feature_fields(style: str) -> dict:
     if style == 'flat':
         return {key: (Literal[-1, 0, 1, 2, 3, 4], Field(description=description)) for key, description in FEATURES.items()}
     return {key: (int | None, Field(description=description, ge=0, le=4)) for key, description in FEATURES.items()}
+
+
+def feature_model(score_annotation: object, style: str, method: str) -> type:
+    fields = feature_fields(style)
+    if method == 'function_calling':
+        prototype = create_simple_output_model(list(FEATURES), list(range(-1, 5)))
+        fields = {key: (prototype.model_fields[key].rebuild_annotation(), Field(description=description)) for key, description in FEATURES.items()}
+    return create_model('FeatureGrade', __config__=ConfigDict(extra='forbid',
+        json_schema_extra={'description': 'Признаки структуры и итоговая оценка ответа'} if method == 'function_calling' else None),
+        **fields, assessment_reason=(str, Field(description='Краткое проверяемое основание')),
+        assessment_score=(score_annotation, Field(description='Исходный балл структуры')))
 
 
 def evaluate(train: list[dict], dev: list[dict], records: dict[str, dict], output: Path) -> None:
@@ -108,9 +120,7 @@ async def run(args: argparse.Namespace) -> None:
         judge = Asessor(llm=llm, embedding_model=None, dataset=dataset, instruction=case['rubric'], context_columns=['assessment_context'],
                         answer_columns=['assessment_score'], score_values=case['scores']['structure'], instruction_summarization=False,
                         instruction_structuring=False, examples_summarization=False)
-    judge._output_model = create_model('FeatureGrade', __config__=ConfigDict(extra='forbid'), **feature_fields(args.schema_style),
-        assessment_reason=(str, Field(description='Краткое проверяемое основание')),
-        assessment_score=(judge._output_model.model_fields['assessment_score'].rebuild_annotation(), Field(description='Исходный балл структуры')))
+    judge._output_model = feature_model(judge._output_model.model_fields['assessment_score'].rebuild_annotation(), args.schema_style, args.output_method)
     instruction = SYSTEM.replace('null.', '-1.') if args.schema_style == 'flat' else SYSTEM
     judge.printing_chain = ChatPromptTemplate.from_messages([SystemMessage(content=instruction+'\nРУБРИКА:\n'+case['rubric']), ('human', '{payload}')])
     judge.agent_chain = judge.printing_chain | llm.with_structured_output(judge._output_model, method=args.output_method,

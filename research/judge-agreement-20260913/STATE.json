@@ -50,7 +50,7 @@
   "execution_states": {
     "anchor": "COMPLETED_REJECTED",
     "nearest": "COMPLETED_REJECTED",
-    "features": "JSON_SMOKES_FAILED_FUNCTION_PREPARED",
+    "features": "FUNCTION_LOCAL_CONTRACT_FIXED_BEFORE_API",
     "new_request_records_before_features": 831,
     "metrics_sha256": {
       "pst-anchor-metrics.json": "f86f295c600dd5098b3c31a371f0cd5479bc93ea3a978d583ed6d2b97f16c11e",
@@ -77,5 +77,13 @@
     "flat_json_smoke": "0/4 valid; malformed JSON",
     "smoke_units": "Same first four train units",
     "output_method": "function_calling"
+  },
+  "function_ready_protocol": {
+    "status": "PREPARED_BEFORE_API",
+    "source_sha256": {
+      "feature_calibration.py": "648cc4827b87002b200811f40a56d61a6869afd1d99f4f6085813a9c321b7580"
+    },
+    "adapter": "Существующий адаптер строковых enum ноды и обязательное описание функции",
+    "tests": 133
   }
 }
