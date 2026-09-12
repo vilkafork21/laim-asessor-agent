@@ -50,7 +50,7 @@
   "execution_states": {
     "anchor": "COMPLETED_REJECTED",
     "nearest": "COMPLETED_REJECTED",
-    "features": "SMOKE_RUNNING",
+    "features": "NULLABLE_SMOKE_FAILED_FLAT_PREPARED",
     "new_request_records_before_features": 831,
     "metrics_sha256": {
       "pst-anchor-metrics.json": "f86f295c600dd5098b3c31a371f0cd5479bc93ea3a978d583ed6d2b97f16c11e",
@@ -59,5 +59,14 @@
       "online-nearest-metrics.json": "90eabc02bad1331863ae03f3a3fab9dcd31499ad96600efee04a36cb9ae8faaf",
       "pst-nearest-overrides.json": "d810eaab2af282d2b65c7318f0ce7f8af6ecae881dbde91d54e117819c6bda85"
     }
+  },
+  "flat_feature_protocol": {
+    "status": "PREPARED_BEFORE_API",
+    "source_sha256": {
+      "feature_calibration.py": "6a3267cc1cc03d67a871cc80e08cfe76d1388040164b06c77b33334780d14f93"
+    },
+    "nullable_smoke": "0/4 valid; transport and malformed JSON",
+    "smoke_units": "Same first four train units",
+    "unknown_value": -1
   }
 }

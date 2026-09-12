@@ -82,3 +82,17 @@ def test_feature_calibration_train_excludes_dev_clients_and_test(monkeypatch, tm
     after = json.loads(output.read_text())
     assert before['fits'] == after['fits']
     assert before['predictions'] == after['predictions']
+
+
+def test_flat_feature_schema_has_only_bounded_enum(monkeypatch):
+    monkeypatch.syspath_prepend(str(path.parent))
+    import feature_calibration as features
+    from pydantic import create_model
+    model = create_model('FlatFeatures', **features.feature_fields('flat'))
+    assert model.model_validate({key: -1 for key in features.FEATURES})
+    for field in model.model_json_schema()['properties'].values():
+        assert field['enum'] == [-1, 0, 1, 2, 3, 4]
+        assert 'anyOf' not in field
+    import pytest
+    with pytest.raises(ValueError):
+        model.model_validate({key: 5 for key in features.FEATURES})

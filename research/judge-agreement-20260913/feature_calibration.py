@@ -10,6 +10,7 @@ import ssl
 import time
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Literal
 from unittest.mock import patch
 
 import pandas as pd
@@ -49,10 +50,16 @@ def feature_values(result: dict) -> list[int]:
     return [result[key] if result[key] is not None else -1 for key in FEATURES]
 
 
+def feature_fields(style: str) -> dict:
+    if style == 'flat':
+        return {key: (Literal[-1, 0, 1, 2, 3, 4], Field(description=description)) for key, description in FEATURES.items()}
+    return {key: (int | None, Field(description=description, ge=0, le=4)) for key, description in FEATURES.items()}
+
+
 def evaluate(train: list[dict], dev: list[dict], records: dict[str, dict], output: Path) -> None:
     eligible = {uid for uid, r in records.items() if r['status'] == 'ok'
                 and isinstance(r['result']['assessment_score'], (int, float))
-                and any(r['result'][key] is not None for key in FEATURES)}
+                and any(r['result'][key] is not None and r['result'][key] >= 0 for key in FEATURES)}
     valid_train = [u for u in train if u['unit_id'] in eligible]
     valid_dev = [u for u in dev if u['unit_id'] in eligible]
     x = [feature_values(records[u['unit_id']]['result']) for u in valid_train]
@@ -101,11 +108,11 @@ async def run(args: argparse.Namespace) -> None:
         judge = Asessor(llm=llm, embedding_model=None, dataset=dataset, instruction=case['rubric'], context_columns=['assessment_context'],
                         answer_columns=['assessment_score'], score_values=case['scores']['structure'], instruction_summarization=False,
                         instruction_structuring=False, examples_summarization=False)
-    fields = {key: (int | None, Field(description=description, ge=0, le=4)) for key, description in FEATURES.items()}
-    judge._output_model = create_model('FeatureGrade', __config__=ConfigDict(extra='forbid'), **fields,
+    judge._output_model = create_model('FeatureGrade', __config__=ConfigDict(extra='forbid'), **feature_fields(args.schema_style),
         assessment_reason=(str, Field(description='Краткое проверяемое основание')),
         assessment_score=(judge._output_model.model_fields['assessment_score'].rebuild_annotation(), Field(description='Исходный балл структуры')))
-    judge.printing_chain = ChatPromptTemplate.from_messages([SystemMessage(content=SYSTEM+'\nРУБРИКА:\n'+case['rubric']), ('human', '{payload}')])
+    instruction = SYSTEM.replace('null.', '-1.') if args.schema_style == 'flat' else SYSTEM
+    judge.printing_chain = ChatPromptTemplate.from_messages([SystemMessage(content=instruction+'\nРУБРИКА:\n'+case['rubric']), ('human', '{payload}')])
     judge.agent_chain = judge.printing_chain | llm.with_structured_output(judge._output_model, method='json_schema', strict=True)
     records = {}
     units = (train+dev)[:args.limit] if args.limit else train+dev
@@ -143,6 +150,7 @@ if __name__ == '__main__':
     for name in ['case', 'clusters', 'credentials-file', 'output']:
         parser.add_argument('--'+name, type=Path, required=True)
     parser.add_argument('--limit', type=int, default=0)
+    parser.add_argument('--schema-style', choices=['nullable', 'flat'], default='nullable')
     arguments = parser.parse_args()
     if arguments.output.resolve().is_relative_to(ROOT):
         raise ValueError('Запросы, ответы и калибратор сохраняются вне Git')
