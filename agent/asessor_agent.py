@@ -17,6 +17,7 @@ import time
 
 import pandas as pd
 from agent.prompts import (
+    ASSESSMENT_INPUT_PROMPT,
     EXAMPLES_SUMMARYZATION_PROMPT,
     INSTRUCTION_PROMPT,
     INSTRUCTION_SUMMARYZATION_PROMPT,
@@ -229,7 +230,10 @@ class Asessor:
         self.logger.debug("EXAMPLES RETRIEVAL INITIALIZATION: SUCCESS")
 
         # Инициализация цепочки для подачи контекста в LLM и логирования
-        system_prompt = ChatPromptTemplate.from_messages([self.SYSTEM_PROMPT])
+        system_prompt = ChatPromptTemplate.from_messages([
+            ("system", self.SYSTEM_PROMPT),
+            ("human", ASSESSMENT_INPUT_PROMPT),
+        ])
         # Начальная цепочка для подачи контекста в LLM и логирования
         ## Пришел запрос -> нашли релевантные примеры из базы знаний -> подали на вход Гиге вместе с инструкцией
         self.printing_chain = self.retrieval_chain | system_prompt
