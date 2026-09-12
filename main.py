@@ -384,6 +384,7 @@ def _calibrate(
         comparison, "assessment_score",
         defect_threshold=assessment_contract["evaluation"]["defect_threshold"],
         higher_is_better=assessment_contract["evaluation"]["higher_is_better"],
+        train_mode_score=float(train["assessment_score"].mode().iloc[0]),
     )
     if score["invalid_share"]:
         logger.warning("calibration: судья ответил на %s из %s единиц",

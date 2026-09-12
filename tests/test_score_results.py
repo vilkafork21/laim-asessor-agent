@@ -134,3 +134,35 @@ def test_lower_is_better_uses_the_other_side_of_threshold():
     result = score_results(frame, 'score', defect_threshold=1, higher_is_better=False)
     assert result['defect_recall'] == 0.5
     assert result['defect_precision'] == 1
+
+
+def test_mode_baseline_is_fixed_on_train_despite_holdout_and_refusals():
+    frame = pd.DataFrame({'score': [0., 0., 0., 1.], 'agent_score': [0., None, None, 1.]})
+    result = score_results(frame, 'score', defect_threshold=1, higher_is_better=True,
+                           train_mode_score=1.)
+    assert result['baseline_mode_accuracy'] == .5
+    assert result['baseline_mode_accuracy_all_units'] == .25
+    assert result['baseline_mode_score'] == 1.
+    assert result['baseline_mode_source'] == 'train'
+    assert result['holdout_mode_accuracy'] == .5
+
+
+def test_missing_train_baseline_is_not_replaced_with_holdout_oracle():
+    frame = pd.DataFrame({'score': [0., 0., 1.], 'agent_score': [0., 0., 1.]})
+    result = score_results(frame, 'score', defect_threshold=1, higher_is_better=True)
+    assert result['baseline_mode_accuracy'] is None
+    assert result['baseline_mode_accuracy_all_units'] is None
+    assert result['holdout_mode_accuracy'] == 2 / 3
+
+
+def test_error_profile_distinguishes_false_alarms_and_ordinal_distance():
+    import pytest
+
+    frame = pd.DataFrame({'score': [0., 1., 2., 2.], 'agent_score': [2., 1., 0., 2.]})
+    result = score_results(frame, 'score', defect_threshold=2, higher_is_better=True)
+    assert result['defect_false_positive_rate'] == .5
+    assert result['balanced_accuracy'] == .5
+    assert result['root_mean_squared_error'] == pytest.approx(2**.5)
+    assert result['label_confusion'] == {
+        'labels': [0., 1., 2.], 'human_rows_judge_columns': [[0, 0, 1], [0, 1, 0], [1, 0, 1]],
+    }
