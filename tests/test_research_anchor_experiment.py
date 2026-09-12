@@ -30,7 +30,8 @@ def test_anchors_cover_training_levels_without_query_gold_or_group_overlap():
     assert experiment.consensus(tied, 'structure') is None
 
 
-def test_neighbor_vote_excludes_same_client_and_breaks_ties_from_train():
+def test_neighbor_vote_excludes_same_client_and_breaks_ties_from_train(monkeypatch):
+    monkeypatch.syspath_prepend(str(path.parent))
     spec = importlib.util.spec_from_file_location('retrieval_diagnostic', path.with_name('retrieval_diagnostic.py'))
     diagnostic = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(diagnostic)
