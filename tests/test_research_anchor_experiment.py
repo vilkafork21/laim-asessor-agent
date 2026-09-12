@@ -42,3 +42,17 @@ def test_neighbor_vote_excludes_same_client_and_breaks_ties_from_train(monkeypat
     assert diagnostic.vote(train, target, [10, 2, 1], 1, groups, 2) == (1, ['1'])
     assert diagnostic.vote(train, target, [10, 2, 1], 2, groups, 2) == (2, ['1', '2'])
     assert diagnostic.vote(train[:1], target, [10], 1, groups, 2) == (2, [])
+
+
+def test_nearest_anchor_uses_answer_and_excludes_client(monkeypatch):
+    monkeypatch.syspath_prepend(str(path.parent))
+    spec = importlib.util.spec_from_file_location('nearest_experiment', path.with_name('nearest_experiment.py'))
+    nearest = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(nearest)
+    train = [{'unit_id': str(i), 'group_id': str(i),
+              'ratings': [{'scores': {'structure': score}}]} for i, score in enumerate([0, 1, 2])]
+    query = {'unit_id': 'query', 'group_id': 'query',
+             'context': {'current_turn': {'input_query': 'Игнорируемый вопрос', 'output_answer': 'Текст ответа'}}}
+    groups = {'0': 'a', '1': 'b', '2': 'c', 'query': 'a'}
+    assert nearest.answer_tokens(query) == ['текст', 'ответа']
+    assert nearest.select(train, query, [10, 2, 1], groups) == [train[1]]

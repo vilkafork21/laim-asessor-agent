@@ -12,5 +12,15 @@
     "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260912-round4/CI10071255-structure.json": "4021369f9d8c8e126dac048a5787370242aaa2e5f3fe18e060fbbc9a58072c27",
     "/Users/antonzyukov/laim-artifacts/judge-deep-research-20260911/cases/CI10071259.json": "7f6715675e1e36e016385187bb5db232b1ce2ac6b2d5398416fcc90ee0f9cb1e"
   },
-  "raw_artifacts": "Вне Git; запросы и ответы не коммитятся."
+  "raw_artifacts": "Вне Git; запросы и ответы не коммитятся.",
+  "nearest_protocol": {
+    "status": "PREPARED_BEFORE_API",
+    "selection": "Разведочный dev; один ближайший ответ другого клиента",
+    "source_sha256": {
+      "nearest_experiment.py": "9befc4a5a1d9975038741840eea7211ac1f9a888f7fb63d6d3368aecb192ead3",
+      "retrieval_diagnostic.py": "a5acc09ec21870069e01e615b634605612ad0de7ff9f649bdaad2a9d8b67e6be",
+      "pst-retrieval.json": "fcf59c71255a3629544fd38fd4cfddf811b9b76a0bf72fd73ab2c74f045e2d33",
+      "online-retrieval.json": "c58da49a09c55f928e6ebbbef6ec0cc7879e226a4366e38a2283cc7569f86054"
+    }
+  }
 }
