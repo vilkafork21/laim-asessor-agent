@@ -112,3 +112,13 @@ def test_feature_function_schema_uses_existing_gigachat_scale_adapter(monkeypatc
         'assessment_reason': 'Проверка', 'assessment_score': '2'})
     assert features.feature_values(result.model_dump()) == [4] * len(features.FEATURES)
     assert result.assessment_score == 2
+
+
+def test_temperature_control_omits_top_p_without_changing_default(monkeypatch):
+    monkeypatch.syspath_prepend(str(path.parent))
+    import feature_calibration as features
+    from langchain_gigachat import GigaChat
+    assert features.generation_parameters(False) == {'temperature': .001, 'top_p': .001}
+    parameters = features.generation_parameters(True)
+    assert parameters == {'temperature': .001}
+    assert GigaChat(credentials='unused', **parameters).top_p is None

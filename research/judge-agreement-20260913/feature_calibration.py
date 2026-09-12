@@ -51,6 +51,10 @@ def feature_values(result: dict) -> list[int]:
     return [result[key] if result[key] is not None else -1 for key in FEATURES]
 
 
+def generation_parameters(temperature_only: bool) -> dict[str, float]:
+    return {'temperature': .001} if temperature_only else {'temperature': .001, 'top_p': .001}
+
+
 def feature_fields(style: str) -> dict:
     if style == 'flat':
         return {key: (Literal[-1, 0, 1, 2, 3, 4], Field(description=description)) for key, description in FEATURES.items()}
@@ -113,8 +117,9 @@ async def run(args: argparse.Namespace) -> None:
     tls.check_hostname, tls.verify_mode = False, ssl.CERT_NONE
     tls.maximum_version = ssl.TLSVersion.TLSv1_2
     recorder = Recorder()
+    generation = generation_parameters(args.temperature_only)
     llm = GigaChat(model='GigaChat-2-Max', base_url='https://api.giga.chat/v1', credentials=settings['CREDENTIALS'], scope=settings['SCOPE'],
-                   ssl_context=tls, temperature=.001, top_p=.001, max_tokens=1000, timeout=150, max_retries=0, callbacks=[recorder])
+                   ssl_context=tls, **generation, max_tokens=1000, timeout=150, max_retries=0, callbacks=[recorder])
     dataset = pd.DataFrame([{'assessment_context': context(u), 'assessment_score': consensus(u, 'structure')} for u in train])
     with patch('agent.asessor_agent.QuestionAnswerRetriever', lambda **_: SimpleNamespace(hybrid_search=lambda **_: [])):
         judge = Asessor(llm=llm, embedding_model=None, dataset=dataset, instruction=case['rubric'], context_columns=['assessment_context'],
@@ -130,7 +135,7 @@ async def run(args: argparse.Namespace) -> None:
     for number, unit in enumerate(units, 1):
         payload = {'assessment_context': context(unit)}
         request = {'messages': [m.model_dump(mode='json') for m in judge.printing_chain.invoke(_serialize_llm_record(payload)).to_messages()],
-                   'schema': judge._output_model.model_json_schema(), 'model': llm.model, 'temperature': .001, 'top_p': .001, 'max_tokens': 1000}
+                   'schema': judge._output_model.model_json_schema(), 'model': llm.model, **generation, 'max_tokens': 1000}
         if args.output_method != 'json_schema':
             request['output_method'] = args.output_method
         identity = hashlib.sha256(canonical([request, unit['unit_id']]).encode()).hexdigest()
@@ -165,6 +170,7 @@ if __name__ == '__main__':
     parser.add_argument('--limit', type=int, default=0)
     parser.add_argument('--schema-style', choices=['nullable', 'flat'], default='nullable')
     parser.add_argument('--output-method', choices=['json_schema', 'function_calling'], default='json_schema')
+    parser.add_argument('--temperature-only', action='store_true')
     arguments = parser.parse_args()
     if arguments.output.resolve().is_relative_to(ROOT):
         raise ValueError('Запросы, ответы и калибратор сохраняются вне Git')

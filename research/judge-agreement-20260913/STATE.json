@@ -85,5 +85,16 @@
     },
     "adapter": "Существующий адаптер строковых enum ноды и обязательное описание функции",
     "tests": 133
+  },
+  "temperature_protocol": {
+    "status": "PREPARED_BEFORE_API",
+    "source_sha256": {
+      "feature_calibration.py": "ac6fd7ab5725be734fc6cd62bb37af242bc22587011db0398a8dfbc1da4a6031"
+    },
+    "temperature": 0.001,
+    "top_p": "omitted",
+    "schema_style": "nullable",
+    "output_method": "json_schema",
+    "smoke_units": "Same first four train units after active full PST"
   }
 }
