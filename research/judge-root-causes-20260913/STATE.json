@@ -1,5 +1,5 @@
 {
-  "status": "H1_H2_H3_REJECTED_H4_PREREGISTERED",
+  "status": "H1_H2_H3_H4_NO_ACCEPTED_GAIN_H5_PREREGISTERED",
   "cases": 8,
   "selected_units": 150,
   "arms": [
@@ -58,7 +58,7 @@
     "tests_passed": 141
   },
   "h4": {
-    "status": "PREPARED_BEFORE_API",
+    "status": "COMPLETE_NOT_BETTER_THAN_BASELINE",
     "agent": "CI09997438",
     "partition": "dev",
     "units": 71,
@@ -68,7 +68,21 @@
       "blind_route",
       "blind_route_examples"
     ],
-    "code_sha256": "6b93cc1f33940ef6ea2a0553d3e5f57eb7de0f2c6e0dfaa33579b5a396ec4231"
+    "code_sha256": "6b93cc1f33940ef6ea2a0553d3e5f57eb7de0f2c6e0dfaa33579b5a396ec4231",
+    "metrics_sha256": "735eca2a409263aad5cd20b8c6c4f0517018accacce9a4f1f68bc20ac25280ed"
   },
-  "human_panel_audit_sha256": "314a7ce9658c6eaec63abafc5b8938e1619c48c7ecc21cea499306f3e5008ee9"
+  "human_panel_audit_sha256": "314a7ce9658c6eaec63abafc5b8938e1619c48c7ecc21cea499306f3e5008ee9",
+  "h5": {
+    "status": "PREPARED_BEFORE_API",
+    "agent": "CI09997438",
+    "partition": "dev",
+    "units": 71,
+    "rubric_neighbors": 6,
+    "arms": [
+      "blind_route_train_retry",
+      "blind_route_rubric_retry"
+    ],
+    "code_sha256": "f4aaa21d7053b310266315cfc78c5cbddf79cbbcda75558c315843150ecd2e7e",
+    "invocation_profile": "production_process_with_rate_limit"
+  }
 }

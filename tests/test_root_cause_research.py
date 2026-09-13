@@ -111,3 +111,14 @@ def test_route_training_uses_only_train_and_valid_source_category(monkeypatch):
     source[1][7] = 'чужой вопрос'
     with pytest.raises(ValueError, match='не совпадает'):
         live.route_training({'units': [unit]}, source)
+
+
+def test_rubric_examples_keep_original_category_and_text(monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]/'research/judge-root-causes-20260913'))
+    import live
+    rubric = 'Введение\nliabilities: Текущие обязательства\nПРИМЕРЫ:\nпомощь близкому\n\nunknown: Остальное\nстрахование кредита\n'
+    examples = live.rubric_examples(rubric)
+    assert {'category': 'liabilities', 'text': 'помощь близкому'} in examples
+    assert {'category': 'unknown', 'text': 'страхование кредита'} in examples
+    assert all(e['text'] in rubric for e in examples)
+    assert not any(e['text'] == 'ПРИМЕРЫ:' for e in examples)
