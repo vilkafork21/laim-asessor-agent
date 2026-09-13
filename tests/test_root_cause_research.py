@@ -56,3 +56,17 @@ def test_live_control_preserves_missing_consensus(monkeypatch):
     assert isinstance(frame, pd.DataFrame)
     assert frame.iloc[0]['score'] is None
     assert 'null' in _serialize_llm_record(frame.iloc[0].to_dict())
+
+
+def test_blind_route_hides_target_decision_and_preserves_prior_context(monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]/'research/judge-root-causes-20260913'))
+    import live
+    unit = {'context': {'current_turn': {'input_query': 'вопрос', 'output_answer': 'ответ'},
+                        'history': [{'input_query': 'раньше', 'output_answer': 'контекст'}],
+                        'observed_prediction': 'liabilities'}, 'ratings': [{'scores': {'assessment_score': 0}}]}
+    before = live.blind_route_context(unit)
+    unit['context']['observed_prediction'] = 'issuance'
+    unit['context']['current_turn']['output_answer'] = 'другая версия'
+    unit['ratings'][0]['scores']['assessment_score'] = 1
+    assert live.blind_route_context(unit) == before
+    assert before == {'input_query': 'вопрос', 'history': [{'input_query': 'раньше', 'output_answer': 'контекст'}]}
