@@ -1,6 +1,7 @@
 """Парный контроль достаточности решения на фиксированных срезах восьми агентов."""
 from __future__ import annotations
 
+import argparse
 import asyncio
 import hashlib
 import json
@@ -51,7 +52,12 @@ def context_for(unit: dict) -> dict:
     return result
 
 
-def evaluate(selection: list[dict], source: dict[str, dict], records: dict) -> list[dict]:
+def training_frame(case: dict) -> pd.DataFrame:
+    rows = [{**{c: consensus(u, c) for c in case['scores']}, 'assessment_context': context_for(u)} for u in case['units'] if u['partition'] == 'train']
+    return pd.DataFrame(rows, dtype=object)
+
+
+def evaluate(selection: list[dict], source: dict[str, dict], records: dict, arms: list[str]) -> list[dict]:
     rows = []
     for item in selection:
         case = source[item['agent']]
@@ -61,7 +67,7 @@ def evaluate(selection: list[dict], source: dict[str, dict], records: dict) -> l
             train = [consensus(u, criterion) for u in case['units'] if u['partition'] == 'train']
             counts = Counter(v for v in train if v is not None)
             mode = min(counts, key=lambda v: (-counts[v], v))
-            for arm in ['baseline', 'decision_sufficiency']:
+            for arm in arms:
                 prediction = [records[item['agent'], uid, arm].get('scores', {}).get(criterion) for uid in item['units']]
                 row = dict(audit(human, prediction), agent=item['agent'], criterion=criterion, arm=arm)
                 known = [i for i, h in enumerate(human) if h is not None]
@@ -71,9 +77,15 @@ def evaluate(selection: list[dict], source: dict[str, dict], records: dict) -> l
     return rows
 
 
-async def run() -> None:
+async def run(observations: bool = False) -> None:
     selection = json.loads((OUT/'selection.json').read_text())
     source = {case['agent']: case for _, case in cases()}
+    arms = ['baseline', 'restored_observations' if observations else 'decision_sufficiency']
+    restored = {}
+    if observations:
+        selection = [item for item in selection if item['agent'] == 'CI09840670']
+        selection[0]['units'] = sorted(u['unit_id'] for u in source['CI09840670']['units'] if u['partition'] == 'dev')
+        restored = {u['unit_id']: u for u in json.loads((OUT/'CI09840670-observations.json').read_text())['units']}
     config = dotenv_values(OLD/'.gigachat.env')
     tls = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     tls.check_hostname, tls.verify_mode = False, ssl.CERT_NONE
@@ -86,17 +98,16 @@ async def run() -> None:
             raise ValueError('Исходная корзина изменилась после фиксации')
         case = source[item['agent']]
         units = {u['unit_id']: u for u in case['units']}
-        train = [{**{c: consensus(u, c) for c in case['scores']}, 'assessment_context': context_for(u)} for u in case['units'] if u['partition'] == 'train']
         with patch('agent.asessor_agent.QuestionAnswerRetriever', lambda **_: SimpleNamespace(hybrid_search=lambda **_: [])):
-            judge = Asessor(llm=llm, embedding_model=None, dataset=pd.DataFrame(train), instruction=case['rubric']+'\n'+case['target'], context_columns=['assessment_context'], answer_columns=list(case['scores']), score_values=next(iter(case['scores'].values())), instruction_summarization=False, instruction_structuring=False)
+            judge = Asessor(llm=llm, embedding_model=None, dataset=training_frame(case), instruction=case['rubric']+'\n'+case['target'], context_columns=['assessment_context'], answer_columns=list(case['scores']), score_values=next(iter(case['scores'].values())), instruction_summarization=False, instruction_structuring=False)
         judge.examples_retriever = SimpleNamespace(hybrid_search=lambda **_: [])
         judge.defect_retriever, judge.defect_examples = None, []
         for number, uid in enumerate(item['units'], 1):
-            for arm in (['baseline', 'decision_sufficiency'] if number % 2 else ['decision_sufficiency', 'baseline']):
-                prompt = SYSTEM_PROMPT if arm == 'baseline' else candidate_prompt()
+            for arm in (arms if number % 2 else arms[::-1]):
+                prompt = candidate_prompt() if arm == 'decision_sufficiency' else SYSTEM_PROMPT
                 judge.printing_chain = judge.retrieval_chain | ChatPromptTemplate.from_messages([('system', prompt), ('human', ASSESSMENT_INPUT_PROMPT)])
                 judge.agent_chain = judge.printing_chain | llm.with_structured_output(judge._output_model, method='function_calling')
-                payload = {'assessment_context': context_for(units[uid])}
+                payload = {'assessment_context': context_for(restored[uid] if arm == 'restored_observations' else units[uid])}
                 request = {'messages': [m.model_dump(mode='json') for m in judge.printing_chain.invoke(_serialize_llm_record(payload)).to_messages()], 'schema': judge._output_model.model_json_schema(), 'model': llm.model, 'temperature': .001, 'top_p': .001, 'max_tokens': 1200, 'method': 'function_calling'}
                 identity = hashlib.sha256(canonical([request, uid]).encode()).hexdigest()
                 path = OUT/'runs'/f'{identity}.json'
@@ -119,10 +130,14 @@ async def run() -> None:
                 print(case['agent'], number, '/', len(item['units']), arm, record['status'], flush=True)
                 if any(e['status_code'] in [400, 401, 402, 403, 422] for e in record['call_errors']):
                     raise RuntimeError('Остановка: запрос, авторизация или квота')
-    result = {'scope': 'Диагностический срез с усилением дефектов, не production prevalence. Роли, данные, шкала, модель одинаковы; меняется только правило достаточности решения. RAG отключён в обоих плечах.', 'rows': evaluate(selection, source, records)}
-    (OUT/'metrics.json').write_text(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False)+'\n')
+    result = {'scope': 'Диагностический срез с усилением дефектов, не production prevalence. Роли, данные, шкала, модель одинаковы; меняется только правило достаточности решения. RAG отключён в обоих плечах.', 'rows': evaluate(selection, source, records, arms)}
+    if observations:
+        result['scope'] = 'Полный dev CI09840670; меняются только восстановленные observed_scenario/subscenario, gold и рубрика неизменны. Общее baseline переиспользуется по точному hash запроса.'
+    (OUT/('observations-metrics.json' if observations else 'metrics.json')).write_text(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False)+'\n')
 
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.ERROR)
-    asyncio.run(run())
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--observations', action='store_true')
+    asyncio.run(run(parser.parse_args().observations))

@@ -1,5 +1,5 @@
 {
-  "status": "PREPARED_BEFORE_API",
+  "status": "H1_RESUMED_H2_PREREGISTERED",
   "cases": 8,
   "selected_units": 150,
   "arms": [
@@ -12,5 +12,22 @@
     "/Users/antonzyukov/laim-artifacts/judge-root-causes-20260913/audit.json": "cf626ca54953292f79ddaa69df888bf61d0fa565aa596bcab555e47a3a1b7ec2",
     "/Users/antonzyukov/laim-artifacts/judge-root-causes-20260913/selection.json": "126dec91477d5e139ca5fb1058ee17679394d3eadc5a5fed7b1a270c3878ad0b",
     "agent/prompts.py": "e16512414888fd7b65e1cd278fba40407108eeb526e2e9a4baefd1bd866de3fb"
+  },
+  "h2": {
+    "agent": "CI09840670",
+    "partition": "dev",
+    "units": 53,
+    "arms": [
+      "baseline",
+      "restored_observations"
+    ],
+    "gold_defects": 1,
+    "status": "PREPARED_BEFORE_API",
+    "sha256": {
+      "research/judge-root-causes-20260913/live.py": "ca7086c34ff705c15ce9719ab2e5816e04af520d536df4811820f9d86a6e9b48",
+      "research/judge-root-causes-20260913/restore_observations.py": "91cd94da39cc92e0a60d24886d525c9216347af708a6922570599ccbb4258e58",
+      "/Users/antonzyukov/laim-artifacts/judge-root-causes-20260913/CI09840670-observations.json": "5f7b9f600012a6d597ef2829affc03339f9946d8516ca939bbdf48a15bab04f7",
+      "/Users/antonzyukov/laim-artifacts/judge-root-causes-20260913/restoration-summary.json": "13e32852a3e3b13b7bafeecc7ab1470b0146438238ba96b379db6a3fb0b5b5cd"
+    }
   }
 }
