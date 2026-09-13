@@ -47,7 +47,9 @@
     ],
     "code_sha256": "d188e078372b8f6c2c0b6bce3c38d50983ce52680e002211c9142ddf46a99d79",
     "initial_local_schema_errors": 71,
-    "fixed_code_sha256": "e3a6a01c0f746917c6762a49916489d10f22857e348d80b27022ce79c81ed2af"
+    "fixed_code_sha256": "e3a6a01c0f746917c6762a49916489d10f22857e348d80b27022ce79c81ed2af",
+    "transport_profile": "default_tls",
+    "transport_repair_code_sha256": "5d52bdb7dbadbe6f76dd70ad0e4681ad51c915df5edb2decdb8379f9b0030799"
   },
   "annotation_audit": {
     "code_sha256": "2abac00c55f39d1153751aebacd15863e7ec4b8170ad3f44b6ab390d35ef53ef",
