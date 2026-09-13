@@ -122,3 +122,24 @@ def test_rubric_examples_keep_original_category_and_text(monkeypatch):
     assert {'category': 'unknown', 'text': 'страхование кредита'} in examples
     assert all(e['text'] in rubric for e in examples)
     assert not any(e['text'] == 'ПРИМЕРЫ:' for e in examples)
+
+
+def test_paired_analysis_counts_abstention_as_lost_yield(monkeypatch, tmp_path):
+    import json
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]/'research/judge-root-causes-20260913'))
+    import analyze
+    units = [{'unit_id': str(i), 'group_id': str(i), 'partition': 'dev',
+              'ratings': [{'scores': {'assessment_score': score}}]} for i, score in enumerate([0, 1, 1])]
+    (tmp_path/'runs').mkdir()
+    for arm, scores in [('baseline', [0, 1, 1]), ('restored_observations', [0, None, 1])]:
+        for unit, score in zip(units, scores):
+            record = {'agent': 'CI09840670', 'unit_id': unit['unit_id'], 'arm': arm,
+                      'scores': {'assessment_score': score}, 'request': {}}
+            (tmp_path/'runs'/f"{arm}-{unit['unit_id']}.json").write_text(json.dumps(record))
+    monkeypatch.setattr(analyze, 'OUT', tmp_path)
+    monkeypatch.setattr(analyze, 'cases', lambda: [(None, {'agent': agent, 'units': units}) for agent in ['CI09840670', 'CI09997438']])
+    analyze.main()
+    result = json.loads((tmp_path/'paired-comparisons.json').read_text())[0]
+    assert result['correct_control'] == 3 and result['correct_candidate'] == 2
+    assert result['regressed'] == 1 and result['corrected'] == 0
+    assert result['delta_correct_label_yield']['ci95'][1] <= 0

@@ -73,7 +73,7 @@
   },
   "human_panel_audit_sha256": "314a7ce9658c6eaec63abafc5b8938e1619c48c7ecc21cea499306f3e5008ee9",
   "h5": {
-    "status": "PREPARED_BEFORE_API",
+    "status": "RUNNING",
     "agent": "CI09997438",
     "partition": "dev",
     "units": 71,
@@ -84,5 +84,10 @@
     ],
     "code_sha256": "f4aaa21d7053b310266315cfc78c5cbddf79cbbcda75558c315843150ecd2e7e",
     "invocation_profile": "production_process_with_rate_limit"
+  },
+  "analysis": {
+    "code_sha256": "2d4d458ea9a6b145867acfb65c74dafb3614b5e1b549f3a5d86e7d75f85df2ab",
+    "adjudication_packets_sha256": "7e3c311ae56e189c9fb691dad7c6b53835939b53886f1b5a4ff1e7c9766e15ed",
+    "tests_passed": 144
   }
 }

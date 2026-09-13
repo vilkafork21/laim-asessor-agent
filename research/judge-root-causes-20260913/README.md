@@ -350,3 +350,32 @@ production-функцию process_with_rate_limit с её политикой п�
 этот wrapper; теперь транспортная политика одинакова внутри H5. Все ошибки
 попыток записываются Recorder. Новый invocation_profile входит в hash.
 Старые H4 ошибки не заменяются. 143 passed; ruff clean.
+
+## Воспроизведение и проверка неопределённости
+
+В окружении проекта Python 3.12:
+
+```sh
+python research/judge-root-causes-20260913/audit.py
+python research/judge-root-causes-20260913/restore_observations.py
+python research/judge-root-causes-20260913/live.py
+python research/judge-root-causes-20260913/live.py --observations
+python research/judge-root-causes-20260913/live.py --blind-route
+python research/judge-root-causes-20260913/live.py --route-examples
+python research/judge-root-causes-20260913/live.py --rubric-examples
+python research/judge-root-causes-20260913/analyze.py
+```
+
+Live-команды последовательные; повтор использует кеш только того же запроса.
+Исторические transport/schema ошибки сохранены отдельно от исправленных
+профилей. Анализ не выбирает лучший ответ: неоднозначная версия пары вызывает
+ошибку. Сравнения используют 2000 парных bootstrap-перевыборок целых групп,
+seed 20260913; 53 группы picker, 55 групп маршрутизатора. Отказы входят в
+correct_label_yield, неопределённые κ-реплики подсчитываются отдельно.
+Интервалы exploratory dev не являются независимым подтверждением после
+перебора гипотез на этих данных.
+
+Подготовлены пять локальных пакетов для разбора границ маршрутов: точный
+исходный вопрос/история, human GT, решения моделей и релевантные фрагменты
+рубрики. Они, экспертные комментарии и реальные traces остаются вне Git.
+В Git — код, агрегаты в тексте и SHA. Смена человеческих оценок не выполнялась.
