@@ -92,7 +92,7 @@
     "tests_passed": 144
   },
   "h6": {
-    "status": "PREPARED_BEFORE_API",
+    "status": "RUNNING_EXTENSION_PREREGISTERED",
     "agents": [
       "CI09774440",
       "CI10071259"
@@ -104,7 +104,16 @@
       "examples_scores_only",
       "examples_human_reasons"
     ],
-    "code_sha256": "3be4c7e2921539994492a8b3d2fd6b52afcb3496b8d41f3aa12072ec9900683c"
+    "code_sha256": "3be4c7e2921539994492a8b3d2fd6b52afcb3496b8d41f3aa12072ec9900683c",
+    "extension": {
+      "agent": "CI09840650",
+      "dev_units": 44,
+      "train_nonempty_comments": 9,
+      "status": "PREPARED_BEFORE_ITS_API"
+    },
+    "placebo_agent": "CI09774440",
+    "extended_units": 147,
+    "extension_code_sha256": "92e7daad443c426e9935cf1a0e8760f70738a513471482edd796082c90ec692a"
   },
   "prior_completed_series_counts": {
     "received_responses": 728,

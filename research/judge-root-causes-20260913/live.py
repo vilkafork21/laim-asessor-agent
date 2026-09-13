@@ -157,7 +157,7 @@ async def run(observations: bool = False, blind_route: bool = False, route_examp
     if rubric_retrieval:
         arms = ['blind_route_train_retry', 'blind_route_rubric_retry']
     if human_reasons:
-        selection = [item for item in selection if item['agent'] in ['CI09774440', 'CI10071259']]
+        selection = [item for item in selection if item['agent'] in ['CI09774440', 'CI09840650', 'CI10071259']]
         for item in selection:
             item['units'] = sorted(u['unit_id'] for u in source[item['agent']]['units'] if u['partition'] == 'dev')
         arms = ['examples_scores_only', 'examples_human_reasons']
@@ -197,7 +197,8 @@ async def run(observations: bool = False, blind_route: bool = False, route_examp
                 annotations = {i: {'input_query': r['question'], 'output_answer': r['answer'], 'comment': r['Комментарий']} for i, r in frame.iterrows()}
             else:
                 book = load_workbook(path, read_only=True, data_only=True)
-                annotations = {i: {'input_query': r[2], 'output_answer': r[4], 'comment': r[7]} for i, r in enumerate(book.active.values, 1)}
+                query_column, comment_column = (3, 25) if case['agent'] == 'CI09840650' else (2, 7)
+                annotations = {i: {'input_query': r[query_column], 'output_answer': r[4], 'comment': r[comment_column]} for i, r in enumerate(book.active.values, 1)}
                 book.close()
             examples = annotated_training(case, annotations)
             index = EnhancedBM25([re.findall(r'\w+', e['question'].lower()) for e in examples])
@@ -277,7 +278,7 @@ async def run(observations: bool = False, blind_route: bool = False, route_examp
     if rubric_retrieval:
         result['scope'] = 'Полный dev CI09997438; одинаковые train-примеры и production-повторы, candidate дополнен шестью исходными фрагментами рубрики с родительской категорией по BM25 текущего запроса. Gold неизменен.'
     if human_reasons:
-        result['scope'] = 'Полный dev ПОСТ и CI09774440; три одинаковых ближайших train-примера с неизменными scores, candidate дополнен исходными экспертными объяснениями только этих train-примеров. Текущие комментарии скрыты.'
+        result['scope'] = 'Полный dev ПОСТ, CI09840650 и placebo CI09774440; три одинаковых ближайших train-примера с неизменными scores, candidate дополнен исходными экспертными объяснениями только этих train-примеров. Текущие комментарии скрыты.'
     (OUT/('human-reasons-metrics.json' if human_reasons else 'rubric-examples-metrics.json' if rubric_retrieval else 'route-examples-metrics.json' if route_examples else 'blind-route-metrics.json' if blind_route else 'observations-metrics.json' if observations else 'metrics.json')).write_text(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False)+'\n')
 
 
