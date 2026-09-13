@@ -144,7 +144,8 @@ def evaluate(selection: list[dict], source: dict[str, dict], records: dict, arms
     return rows
 
 
-async def run(observations: bool = False, blind_route: bool = False, route_examples: bool = False, rubric_retrieval: bool = False, human_reasons: bool = False, provider_screen: bool = False) -> None:
+async def run(observations: bool = False, blind_route: bool = False, route_examples: bool = False, rubric_retrieval: bool = False, human_reasons: bool = False, provider_screen: bool = False, provider_compatible: bool = False) -> None:
+    human_reasons = human_reasons or provider_compatible
     route_examples = route_examples or rubric_retrieval
     blind_route = blind_route or route_examples
     selection = json.loads((OUT/'selection.json').read_text())
@@ -166,6 +167,15 @@ async def run(observations: bool = False, blind_route: bool = False, route_examp
         for item in selection:
             item['units'] = sorted(u['unit_id'] for u in source[item['agent']]['units'] if u['partition'] == 'dev')
         arms = ['examples_scores_only', 'examples_human_reasons']
+    excluded_references = set()
+    if provider_compatible:
+        selection = [item for item in selection if item['agent'] == 'CI10071259']
+        arms = ['examples_scores_only', 'examples_provider_compatible']
+        screening = json.loads((OUT/'provider-screen-results.json').read_text())['screening']
+        excluded_references = {r['unit_id'] for r in screening if r['provider_blacklist'] is True}
+        train_ids = {u['unit_id'] for u in source['CI10071259']['units'] if u['partition'] == 'train'}
+        if not excluded_references or not excluded_references <= train_ids:
+            raise ValueError('Исключаются только подтверждённые несовместимые train-примеры')
     if provider_screen:
         selection = [item for item in selection if item['agent'] == 'CI10071259']
         selection[0]['units'] = json.loads((OUT/'provider-screen-selection.json').read_text())
@@ -225,7 +235,8 @@ async def run(observations: bool = False, blind_route: bool = False, route_examp
                 if human_reasons:
                     prompt += '\nЭкспертные пояснения к train-примерам объясняют их оценки, а не факты текущего клиента. Не переноси из них персональные факты в текущий объект. Исходная рубрика имеет приоритет.'
                     ranks = index.get_scores(re.findall(r'\w+', _serialize_llm_record({'assessment_context': context_for(units[uid])}).lower()))
-                    chosen = sorted(range(len(examples)), key=lambda i: (-ranks[i], examples[i]['unit_id']))[:3]
+                    eligible = [i for i, e in enumerate(examples) if arm != 'examples_provider_compatible' or e['unit_id'] not in excluded_references]
+                    chosen = sorted(eligible, key=lambda i: (-ranks[i], examples[i]['unit_id']))[:3]
                     selected = [{'question': examples[i]['question'], 'answer': _serialize_llm_record({**examples[i]['scores'], **({'expert_comments': examples[i]['comments']} if arm == 'examples_human_reasons' else {})})} for i in chosen]
                     judge.examples_retriever = SimpleNamespace(hybrid_search=lambda **_: selected)
                 judge.printing_chain = judge.retrieval_chain | ChatPromptTemplate.from_messages([('system', prompt), ('human', ASSESSMENT_INPUT_PROMPT)])
@@ -296,7 +307,10 @@ async def run(observations: bool = False, blind_route: bool = False, route_examp
         result['scope'] = 'Полный dev CI09997438; одинаковые train-примеры и production-повторы, candidate дополнен шестью исходными фрагментами рубрики с родительской категорией по BM25 текущего запроса. Gold неизменен.'
     if human_reasons:
         result['scope'] = 'Полный dev ПОСТ, CI09840650 и placebo CI09774440; три одинаковых ближайших train-примера с неизменными scores, candidate дополнен исходными экспертными объяснениями только этих train-примеров. Текущие комментарии скрыты.'
-    (OUT/('human-reasons-metrics.json' if human_reasons else 'rubric-examples-metrics.json' if rubric_retrieval else 'route-examples-metrics.json' if route_examples else 'blind-route-metrics.json' if blind_route else 'observations-metrics.json' if observations else 'metrics.json')).write_text(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False)+'\n')
+    if provider_compatible:
+        result['scope'] = 'Полный dev ПОСТ: из train RAG исключены только 4 примера с отдельно подтверждённым provider blacklist. Текущие context/evidence/gold и все dev единицы неизменны; те же 3 ближайших примера и политика повторов.'
+    result['record_manifest'] = [{'agent': agent, 'unit_id': uid, 'arm': arm, 'run_file': hashlib.sha256(canonical([r['request'], uid]).encode()).hexdigest()+'.json', 'record_sha256': hashlib.sha256(canonical(r).encode()).hexdigest()} for (agent, uid, arm), r in records.items()]
+    (OUT/('provider-compatible-metrics.json' if provider_compatible else 'human-reasons-metrics.json' if human_reasons else 'rubric-examples-metrics.json' if rubric_retrieval else 'route-examples-metrics.json' if route_examples else 'blind-route-metrics.json' if blind_route else 'observations-metrics.json' if observations else 'metrics.json')).write_text(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False)+'\n')
 
 
 if __name__ == '__main__':
@@ -309,5 +323,6 @@ if __name__ == '__main__':
     group.add_argument('--rubric-examples', action='store_true')
     group.add_argument('--human-reasons', action='store_true')
     group.add_argument('--provider-screen', action='store_true')
+    group.add_argument('--provider-compatible', action='store_true')
     args = parser.parse_args()
-    asyncio.run(run(args.observations, args.blind_route, args.route_examples, args.rubric_examples, args.human_reasons, args.provider_screen))
+    asyncio.run(run(args.observations, args.blind_route, args.route_examples, args.rubric_examples, args.human_reasons, args.provider_screen, args.provider_compatible))

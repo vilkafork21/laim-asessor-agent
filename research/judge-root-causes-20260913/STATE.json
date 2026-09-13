@@ -1,5 +1,5 @@
 {
-  "status": "H1_TO_H6_NO_ACCEPTED_GAIN_H7A_RUNNING",
+  "status": "H7B_PREREGISTERED_NO_ACCEPTED_PRODUCTION_CANDIDATE",
   "cases": 8,
   "selected_units": 150,
   "arms": [
@@ -121,12 +121,26 @@
     "raw_records_including_local_failures": 805
   },
   "h7a": {
-    "status": "RUNNING",
+    "status": "COMPLETE_4_CONFIRMED_BLACKLIST",
     "agent": "CI10071259",
     "partition": "train",
     "units": 15,
     "selection_sha256": "28e1fcc5dfb2a3f4febc80bc9f3b33e1391725aae5786e004c4bbd292426088f",
     "association_sha256": "71e1dee4a2bd7140e6f7f2959a8edd554706ca2a4dd6cdb4f7d9d002208bb257",
-    "code_sha256": "b9a1806ac75c05baf379d0613099729a7cb99c1153dc45c64501005bf596dff5"
+    "code_sha256": "b9a1806ac75c05baf379d0613099729a7cb99c1153dc45c64501005bf596dff5",
+    "results_sha256": "6332741a3aef20b463a996899b104f27b7e9c9f600a7609cfce51b4f2e4be488"
+  },
+  "h7b": {
+    "status": "PREPARED_BEFORE_API",
+    "agent": "CI10071259",
+    "partition": "dev",
+    "units": 63,
+    "excluded_train_references": 4,
+    "ranking": "original_BM25_scores_filter_after_ranking",
+    "arms": [
+      "examples_scores_only",
+      "examples_provider_compatible"
+    ],
+    "code_sha256": "b01c23f161240e328963eb4d22d872902eb1f3059eb270b5e055bfde4406e569"
   }
 }
