@@ -1,0 +1,1 @@
+[{"url":"https://api.giga.chat/v1/models","http_status":null,"error":"ConnectionError","stage":"dns"},{"url":"https://ngw.devices.sberbank.ru:9443/api/v2/oauth","http_status":null,"error":"ConnectionError","stage":"dns"}]
