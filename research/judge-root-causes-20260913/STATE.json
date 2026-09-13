@@ -1,0 +1,16 @@
+{
+  "status": "PREPARED_BEFORE_API",
+  "cases": 8,
+  "selected_units": 150,
+  "arms": [
+    "baseline",
+    "decision_sufficiency"
+  ],
+  "sha256": {
+    "research/judge-root-causes-20260913/audit.py": "b0141bde5b5ace84f2830ca8a3b61a003a90cc019ec09f2932a9784eeaff1366",
+    "research/judge-root-causes-20260913/live.py": "003136f8a5e372ddabbbbdeb64782021540a2c554a6609305b3c6fe310c34621",
+    "/Users/antonzyukov/laim-artifacts/judge-root-causes-20260913/audit.json": "cf626ca54953292f79ddaa69df888bf61d0fa565aa596bcab555e47a3a1b7ec2",
+    "/Users/antonzyukov/laim-artifacts/judge-root-causes-20260913/selection.json": "126dec91477d5e139ca5fb1058ee17679394d3eadc5a5fed7b1a270c3878ad0b",
+    "agent/prompts.py": "e16512414888fd7b65e1cd278fba40407108eeb526e2e9a4baefd1bd866de3fb"
+  }
+}
