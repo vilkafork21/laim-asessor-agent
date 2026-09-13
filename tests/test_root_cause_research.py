@@ -255,3 +255,27 @@ def test_nbsp_evidence_binding_keeps_answer_and_rejects_format_changes(monkeypat
     for question, wrong_answer in [('чужой', answer), ('q', 'два слова строка'), ('q', 'два  слова\nстрока')]:
         with pytest.raises(ValueError):
             restoration.bind_nbsp_tools(messages, question, wrong_answer)
+
+
+def test_pairwise_reverse_addresses_same_objects_with_multiple_references(monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]/'research/judge-root-causes-20260913'))
+    import pairwise
+    target = {'context': {'name': 'target'}, 'evidence': []}
+    refs = [{'context': {'name': str(i)}, 'evidence': []} for i in range(3)]
+    forward, _ = pairwise.comparison_payload(target, refs, ['score'], False)
+    backward, _ = pairwise.comparison_payload(target, refs, ['score'], True)
+    for first, second in zip(forward['comparisons'], backward['comparisons'], strict=True):
+        assert first['key'] == second['key']
+        assert forward['objects'][first['left']] == backward['objects'][second['right']]
+        assert forward['objects'][first['right']] == backward['objects'][second['left']]
+
+
+def test_pairwise_stable_analysis_abstains_on_disagreement(monkeypatch, tmp_path):
+    import json
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]/'research/judge-root-causes-20260913'))
+    import analyze
+    monkeypatch.setattr(analyze, 'OUT', tmp_path)
+    (tmp_path/'runs').mkdir()
+    for arm, scores in [('reference_pairwise', {'same': 1, 'different': 0}), ('reference_pairwise_reverse', {'same': 1, 'different': 1})]:
+        (tmp_path/'runs'/f'{arm}.json').write_text(json.dumps({'agent': 'a', 'unit_id': 'u', 'arm': arm, 'request': {}, 'scores': scores}))
+    assert analyze.load_records()['a', 'u', 'reference_pairwise_stable']['scores'] == {'same': 1, 'different': None}

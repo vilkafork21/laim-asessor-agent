@@ -1,5 +1,5 @@
 {
-  "status": "H9_PREREGISTERED_NO_ACCEPTED_PRODUCTION_CANDIDATE",
+  "status": "H1_H9_COMPLETE_NO_ACCEPTED_UNIVERSAL_PRODUCTION_CANDIDATE",
   "cases": 8,
   "selected_units": 150,
   "arms": [
@@ -87,9 +87,10 @@
     "metrics_sha256": "541972e4cd8599345e1dd3311256a2837d57a275c9ee0280ba99d9c012632f7f"
   },
   "analysis": {
-    "code_sha256": "539592e98254471990ac8e65451cdecb8d4271b7d6e3f27988b493f8c5963e64",
+    "code_sha256": "5930934f801f2e770788cc1c3f1ea8711bde3b3f53d0d85fff2508e373dc0388",
     "adjudication_packets_sha256": "7e3c311ae56e189c9fb691dad7c6b53835939b53886f1b5a4ff1e7c9766e15ed",
-    "tests_passed": 147
+    "tests_passed": 156,
+    "paired_results_sha256": "1d89ee8f7aee7d623592a9ac7ede60d285f176c9e63d43696c5c740c53aa18ed"
   },
   "h6": {
     "status": "COMPLETE_REJECTED",
@@ -109,7 +110,7 @@
       "agent": "CI09840650",
       "dev_units": 44,
       "train_nonempty_comments": 9,
-      "status": "PREPARED_BEFORE_ITS_API"
+      "status": "COMPLETE_NO_GAIN"
     },
     "placebo_agent": "CI09774440",
     "extended_units": 147,
@@ -162,7 +163,7 @@
     "metrics_sha256": "a04c4fd1cc188a9b79e1e822dd608d43bb6aee25815a3c49eed525c950ba4e2e"
   },
   "h9": {
-    "status": "RUNNING",
+    "status": "COMPLETE_REJECTED",
     "cases": 8,
     "units": 150,
     "requests": 450,
@@ -172,7 +173,12 @@
       "reference_pairwise_reverse"
     ],
     "code_sha256": "6579a6b60f9d49829ae800cb6f6c7f54e4c0b176adda1a75f104b847f9b9d3d3",
-    "selection_sha256": "126dec91477d5e139ca5fb1058ee17679394d3eadc5a5fed7b1a270c3878ad0b"
+    "selection_sha256": "126dec91477d5e139ca5fb1058ee17679394d3eadc5a5fed7b1a270c3878ad0b",
+    "metrics_sha256": "f3b065e104ed993a9ac24d789e1a18058b0c3afbe1f3cd92de28c1004ac3ba51",
+    "received_responses": 450,
+    "technical_errors": 0,
+    "stable_comparisons": 206,
+    "total_comparisons": 624
   },
   "production_diagnostics": {
     "commit": "8aa2491",
@@ -202,5 +208,11 @@
     "summary_sha256": "432d99632a6c983db24b5e0e61d8f9b74bc94e478a78bc9420b70ec7c79871c8",
     "variants_sha256": "0318e198fcc644f1ba6dbb26e03b0f1b282b063d31be47a621333e6475ed411e",
     "tests_passed": 154
+  },
+  "current_totals": {
+    "raw_records_including_local_failures": 1640,
+    "received_api_responses_including_refusals": 1559,
+    "callback_errors": 20,
+    "tests_passed": 156
   }
 }

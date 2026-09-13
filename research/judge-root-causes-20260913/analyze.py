@@ -36,6 +36,13 @@ def load_records() -> dict:
             if key in records and records[key] != record:
                 raise ValueError('Manifest: неоднозначная версия ответа')
             records[key] = record
+    for (agent, uid, arm), forward in list(records.items()):
+        if arm != 'reference_pairwise' or (agent, uid, 'reference_pairwise_reverse') not in records:
+            continue
+        backward = records[agent, uid, 'reference_pairwise_reverse']
+        keys = set(forward.get('scores', {})) | set(backward.get('scores', {}))
+        records[agent, uid, 'reference_pairwise_stable'] = {'scores': {
+            c: forward.get('scores', {}).get(c) if forward.get('scores', {}).get(c) == backward.get('scores', {}).get(c) else None for c in keys}}
     return records
 
 
@@ -68,10 +75,16 @@ def main() -> None:
                    ('CI09840650', 'assessment_score', 'examples_scores_only', 'examples_human_reasons'),
                    *[('CI10071259', c, 'examples_scores_only', arm) for arm in ['examples_human_reasons', 'examples_provider_compatible'] for c in ['completeness', 'factuality', 'structure']]]
     comparisons += [('CI10071259', c, 'examples_provider_compatible', 'examples_provider_compatible_ultra') for c in ['completeness', 'factuality', 'structure']]
+    comparisons += [(agent, c, 'reference_pointwise', arm) for agent, case in source.items() for c in case.get('scores', {}) for arm in ['reference_pairwise', 'reference_pairwise_reverse', 'reference_pairwise_stable']]
     result = []
     for agent, criterion, control, candidate in comparisons:
+        if not any(k[0] == agent and k[2] == candidate for k in records):
+            continue
         case = source[agent]
         units = sorted([u for u in case['units'] if u['partition'] == 'dev'], key=lambda u: u['unit_id'])
+        if control == 'reference_pointwise':
+            selected = next(s['units'] for s in json.loads((OUT/'selection.json').read_text()) if s['agent'] == agent)
+            units = [u for u in units if u['unit_id'] in selected]
         if any((agent, u['unit_id'], a) not in records for u in units for a in [control, candidate]):
             continue
         human = np.array([consensus(u, criterion) for u in units], dtype=float)
