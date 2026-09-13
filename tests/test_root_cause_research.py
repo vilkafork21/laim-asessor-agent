@@ -137,7 +137,7 @@ def test_paired_analysis_counts_abstention_as_lost_yield(monkeypatch, tmp_path):
                       'scores': {'assessment_score': score}, 'request': {}}
             (tmp_path/'runs'/f"{arm}-{unit['unit_id']}.json").write_text(json.dumps(record))
     monkeypatch.setattr(analyze, 'OUT', tmp_path)
-    monkeypatch.setattr(analyze, 'cases', lambda: [(None, {'agent': agent, 'units': units}) for agent in ['CI09840670', 'CI09997438']])
+    monkeypatch.setattr(analyze, 'cases', lambda: [(None, {'agent': agent, 'units': units}) for agent in ['CI09840670', 'CI09997438', 'CI09774440', 'CI09840650', 'CI10071259']])
     analyze.main()
     result = json.loads((tmp_path/'paired-comparisons.json').read_text())[0]
     assert result['correct_control'] == 3 and result['correct_candidate'] == 2

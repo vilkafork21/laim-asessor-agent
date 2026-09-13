@@ -39,20 +39,23 @@ def main() -> None:
                                'alpha_nominal': float(krippendorff.alpha(matrix, level_of_measurement='nominal')),
                                'alpha_ordinal': float(krippendorff.alpha(matrix, level_of_measurement='ordinal'))})
     (OUT/'human-panel-audit.json').write_text(json.dumps(panel_rows, ensure_ascii=False, indent=2, allow_nan=False)+'\n')
-    comparisons = [('CI09840670', 'baseline', 'restored_observations'),
-                   ('CI09997438', 'baseline', 'blind_route'),
-                   ('CI09997438', 'blind_route', 'blind_route_examples'),
-                   ('CI09997438', 'baseline', 'blind_route_examples'),
-                   ('CI09997438', 'blind_route_train_retry', 'blind_route_rubric_retry'),
-                   ('CI09997438', 'baseline', 'blind_route_rubric_retry')]
+    comparisons = [('CI09840670', 'assessment_score', 'baseline', 'restored_observations'),
+                   ('CI09997438', 'assessment_score', 'baseline', 'blind_route'),
+                   ('CI09997438', 'assessment_score', 'blind_route', 'blind_route_examples'),
+                   ('CI09997438', 'assessment_score', 'baseline', 'blind_route_examples'),
+                   ('CI09997438', 'assessment_score', 'blind_route_train_retry', 'blind_route_rubric_retry'),
+                   ('CI09997438', 'assessment_score', 'baseline', 'blind_route_rubric_retry'),
+                   ('CI09774440', 'assessment_score', 'examples_scores_only', 'examples_human_reasons'),
+                   ('CI09840650', 'assessment_score', 'examples_scores_only', 'examples_human_reasons'),
+                   *[('CI10071259', c, 'examples_scores_only', 'examples_human_reasons') for c in ['completeness', 'factuality', 'structure']]]
     result = []
-    for agent, control, candidate in comparisons:
+    for agent, criterion, control, candidate in comparisons:
         case = source[agent]
         units = sorted([u for u in case['units'] if u['partition'] == 'dev'], key=lambda u: u['unit_id'])
         if any((agent, u['unit_id'], a) not in records for u in units for a in [control, candidate]):
             continue
-        human = np.array([consensus(u, 'assessment_score') for u in units], dtype=float)
-        prediction = [np.array([records[agent, u['unit_id'], a].get('scores', {}).get('assessment_score') for u in units], dtype=float) for a in [control, candidate]]
+        human = np.array([consensus(u, criterion) for u in units], dtype=float)
+        prediction = [np.array([records[agent, u['unit_id'], a].get('scores', {}).get(criterion) for u in units], dtype=float) for a in [control, candidate]]
         groups = defaultdict(list)
         for i, u in enumerate(units):
             groups[u['group_id']].append(i)
@@ -72,7 +75,7 @@ def main() -> None:
                     yields.append(float(np.mean(human[known] == p[known])))
                 deltas.append([kappas[1]-kappas[0], yields[1]-yields[0]])
         correct = [p == human for p in prediction]
-        row = {'agent': agent, 'control': control, 'candidate': candidate, 'units': len(units), 'groups': len(groups),
+        row = {'agent': agent, 'criterion': criterion, 'control': control, 'candidate': candidate, 'units': len(units), 'groups': len(groups),
                'correct_control': int(correct[0].sum()), 'correct_candidate': int(correct[1].sum()),
                'corrected': int((~correct[0] & correct[1]).sum()), 'regressed': int((correct[0] & ~correct[1]).sum()),
                'bootstrap': '2000 paired group replicates; seed 20260913; exploratory dev, not fresh test'}

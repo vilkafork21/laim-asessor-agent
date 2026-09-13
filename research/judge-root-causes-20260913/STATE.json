@@ -1,5 +1,5 @@
 {
-  "status": "H6_RUNNING_H7A_PREREGISTERED",
+  "status": "H1_TO_H6_NO_ACCEPTED_GAIN_H7A_RUNNING",
   "cases": 8,
   "selected_units": 150,
   "arms": [
@@ -92,7 +92,7 @@
     "tests_passed": 144
   },
   "h6": {
-    "status": "RUNNING_EXTENSION_PREREGISTERED",
+    "status": "COMPLETE_REJECTED",
     "agents": [
       "CI09774440",
       "CI10071259"
@@ -113,14 +113,15 @@
     },
     "placebo_agent": "CI09774440",
     "extended_units": 147,
-    "extension_code_sha256": "92e7daad443c426e9935cf1a0e8760f70738a513471482edd796082c90ec692a"
+    "extension_code_sha256": "92e7daad443c426e9935cf1a0e8760f70738a513471482edd796082c90ec692a",
+    "metrics_sha256": "a409cf0e673ca39099917204b6968861792b6154e9d5db4749aac7a28346ccd8"
   },
   "prior_completed_series_counts": {
     "received_responses": 728,
     "raw_records_including_local_failures": 805
   },
   "h7a": {
-    "status": "PREPARED_BEFORE_API",
+    "status": "RUNNING",
     "agent": "CI10071259",
     "partition": "train",
     "units": 15,
