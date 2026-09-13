@@ -242,10 +242,28 @@ class Asessor:
         self._create_output_model()
 
         # Используем Pydantic structured output вместо JsonOutputParser
-        self.agent_chain = self.printing_chain | self.llm.with_structured_output(
-            self._output_model
-        )
+        if isinstance(self.llm, GigaChat):
+            output_chain = self.llm.with_structured_output(self._output_model, include_raw=True)
+            output_chain = output_chain | RunnableLambda(self._parse_gigachat_output)
+        else:
+            output_chain = self.llm.with_structured_output(self._output_model)
+        self.agent_chain = self.printing_chain | output_chain
         self.logger.debug("Asessor Agent chain: SUCCESS")
+
+    def _parse_gigachat_output(self, result: dict) -> BaseModel | None:
+        """Сохраняет причину пропуска до потери raw, не публикуя содержимое ответа."""
+        if result['raw'].response_metadata.get('finish_reason') == 'blacklist':
+            self.logger.warning('Ответ GigaChat не оценён: provider_refusal')
+            return None
+        if result['parsing_error'] is not None:
+            self.logger.warning('Ответ GigaChat не разобран: parse_error')
+            raise result['parsing_error']
+        parsed = result['parsed']
+        if parsed is None:
+            self.logger.warning('Ответ GigaChat не оценён: missing_structured_output')
+        elif any(value is None for value in parsed.model_dump().values()):
+            self.logger.warning('Ответ GigaChat содержит отказ по рубрике: not_assessable')
+        return parsed
 
     def _create_output_model(self) -> None:
         """Создаёт Pydantic модель для structured output на основе dataset."""

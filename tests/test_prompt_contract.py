@@ -128,3 +128,73 @@ def test_assessor_keeps_untrusted_context_out_of_system_message(monkeypatch):
     for key in ('examples', 'domain_knowledge', 'user_input'):
         assert payload[key] not in messages[0].content
         assert payload[key] in messages[1].content
+
+
+def test_gigachat_outcomes_preserve_scores_retry_semantics_and_safe_logs(caplog):
+    import logging
+    import pytest
+    from langchain_core.messages import AIMessage
+    from agent.asessor_agent import Asessor
+    from agent.pydantic_output import create_simple_output_model
+
+    judge = Asessor.__new__(Asessor)
+    judge.logger = logging.getLogger('assessor-outcome-test')
+    schema = create_simple_output_model(['score'], [0, 1])
+    raw = AIMessage(content='секретный исходный ответ', response_metadata={'finish_reason': 'blacklist'})
+    with caplog.at_level(logging.WARNING):
+        assert judge._parse_gigachat_output({'raw': raw, 'parsed': None, 'parsing_error': None}) is None
+        assert 'provider_refusal' in caplog.text
+        caplog.clear()
+        raw = AIMessage(content='секретный исходный ответ')
+        assert judge._parse_gigachat_output({'raw': raw, 'parsed': None, 'parsing_error': None}) is None
+        assert 'missing_structured_output' in caplog.text
+        caplog.clear()
+        parsed = schema(score='not_assessable')
+        assert judge._parse_gigachat_output({'raw': raw, 'parsed': parsed, 'parsing_error': None}) is parsed
+        assert 'not_assessable' in caplog.text
+        caplog.clear()
+        error = ValueError('секретный исходный ответ')
+        with pytest.raises(ValueError) as raised:
+            judge._parse_gigachat_output({'raw': raw, 'parsed': None, 'parsing_error': error})
+        assert raised.value is error
+        assert 'parse_error' in caplog.text
+        assert 'секретный' not in caplog.text
+        caplog.clear()
+        parsed = schema(score=0)
+        assert judge._parse_gigachat_output({'raw': raw, 'parsed': parsed, 'parsing_error': None}) is parsed
+        assert caplog.text == ''
+
+
+def test_native_gigachat_blacklist_is_logged_without_retry(monkeypatch, caplog):
+    import asyncio
+    import logging
+    import pandas as pd
+    from langchain_core.messages import AIMessage
+    from langchain_core.outputs import ChatGeneration, ChatResult
+    from langchain_core.runnables import RunnableLambda
+    from langchain_gigachat import GigaChat
+    from agent.asessor_agent import Asessor
+    from utils import process_with_rate_limit
+
+    calls = []
+
+    async def blocked(*args, **kwargs):
+        calls.append(1)
+        return ChatResult(generations=[ChatGeneration(message=AIMessage(
+            content='', response_metadata={'finish_reason': 'blacklist'},
+        ))])
+
+    monkeypatch.setattr(GigaChat, '_agenerate', blocked)
+    payload = {'instructions': 'Рубрика', 'examples': '', 'domain_knowledge': '',
+               'user_input': '{}', 'answer_columns_values_set': {'score': [0, 1]}}
+    monkeypatch.setattr(Asessor, '_init_rag', lambda self: setattr(
+        self, 'retrieval_chain', RunnableLambda(lambda _: payload),
+    ))
+    judge = Asessor(llm=GigaChat(access_token='offline-test'), embedding_model=None,
+                    dataset=pd.DataFrame({'context': ['{}'], 'score': [1]}), instruction='Рубрика',
+                    context_columns=['context'], answer_columns=['score'], score_values=[0, 1],
+                    instruction_summarization=False, instruction_structuring=False)
+    with caplog.at_level(logging.WARNING):
+        assert asyncio.run(process_with_rate_limit(judge.agent_chain, ['{}'])) == [None]
+    assert len(calls) == 1
+    assert 'provider_refusal' in caplog.text
