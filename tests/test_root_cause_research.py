@@ -72,3 +72,26 @@ def test_blind_route_hides_target_decision_and_preserves_prior_context(monkeypat
     assert before == {'input_query': 'вопрос', 'history': [{'input_query': 'раньше', 'output_answer': 'контекст'}]}
     from langchain_gigachat import GigaChat
     GigaChat(access_token='offline-test').with_structured_output(live.RouteDecision, method='function_calling')
+
+
+def test_annotation_audit_binds_comments_to_actual_answer(monkeypatch, tmp_path):
+    import json
+    import pandas as pd
+    import pytest
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]/'research/judge-root-causes-20260913'))
+    import audit as causes
+    unit = {'unit_id': 'x', 'partition': 'dev', 'source_rows': [0],
+            'context': {'current_turn': {'output_answer': 'версия A'}},
+            'evidence': [{'content': '[]'}], 'ratings': [{'scores': {'structure': 0}}]}
+    case = {'agent': 'CI10071259', 'units': [unit], 'source_hashes': {'local.parquet': ''}, 'scores': {'structure': [0, 1, 2]}, 'rubric': ''}
+    frame = pd.DataFrame([{'answer': 'версия B', 'ТЭГ': '#НетЛогики', 'Комментарий': 'эксперт'}])
+    monkeypatch.setattr(causes, 'cases', lambda: [(None, case)])
+    monkeypatch.setattr(causes, 'OUT', tmp_path)
+    monkeypatch.setattr(causes.pd, 'read_parquet', lambda _: frame)
+    with pytest.raises(ValueError, match='другой версии'):
+        causes.annotation_audit()
+    frame.at[0, 'answer'] = 'версия A'
+    causes.annotation_audit()
+    result = json.loads((tmp_path/'rubric-annotation-audit.json').read_text())['CI10071259']
+    assert result['structure_annotation_audit']['dev:0']['unanimous'] == 1
+    assert result['only_empty_tool_results'][1]['units'] == 1

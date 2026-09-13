@@ -1,5 +1,5 @@
 {
-  "status": "H1_REJECTED_H2_RUNNING_H3_PREREGISTERED",
+  "status": "H1_H2_COMPLETE_REJECTED_H3_RUNNING",
   "cases": 8,
   "selected_units": 150,
   "arms": [
@@ -22,13 +22,14 @@
       "restored_observations"
     ],
     "gold_defects": 1,
-    "status": "PREPARED_BEFORE_API",
+    "status": "COMPLETE_NO_GAIN",
     "sha256": {
       "research/judge-root-causes-20260913/live.py": "ca7086c34ff705c15ce9719ab2e5816e04af520d536df4811820f9d86a6e9b48",
       "research/judge-root-causes-20260913/restore_observations.py": "91cd94da39cc92e0a60d24886d525c9216347af708a6922570599ccbb4258e58",
       "/Users/antonzyukov/laim-artifacts/judge-root-causes-20260913/CI09840670-observations.json": "5f7b9f600012a6d597ef2829affc03339f9946d8516ca939bbdf48a15bab04f7",
       "/Users/antonzyukov/laim-artifacts/judge-root-causes-20260913/restoration-summary.json": "13e32852a3e3b13b7bafeecc7ab1470b0146438238ba96b379db6a3fb0b5b5cd"
-    }
+    },
+    "metrics_sha256": "100c67aea2bd3c6442109ce00f3729704c1c359be47b38fe8d88e19a951344bf"
   },
   "h1_result": {
     "status": "COMPLETE_REJECTED",
@@ -47,5 +48,10 @@
     "code_sha256": "d188e078372b8f6c2c0b6bce3c38d50983ce52680e002211c9142ddf46a99d79",
     "initial_local_schema_errors": 71,
     "fixed_code_sha256": "e3a6a01c0f746917c6762a49916489d10f22857e348d80b27022ce79c81ed2af"
+  },
+  "annotation_audit": {
+    "code_sha256": "2abac00c55f39d1153751aebacd15863e7ec4b8170ad3f44b6ab390d35ef53ef",
+    "result_sha256": "eff83fc5c64be81e6d7a41142942fdf8e558f552970e52541cd886eeb80f1639",
+    "tests_passed": 141
   }
 }
