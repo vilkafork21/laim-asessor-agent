@@ -200,3 +200,30 @@ def test_ultra_profile_keeps_provider_defaults_and_separate_budget(monkeypatch):
     import live
     assert live.model_profile(False) == {'model': 'GigaChat-2-Max', 'temperature': .001, 'top_p': .001, 'max_tokens': 1200}
     assert live.model_profile(True) == {'model': 'GigaChat-3-Ultra', 'max_tokens': 16384}
+
+
+def test_pairwise_labels_hidden_order_reversed_and_grade_identifiable(monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]/'research/judge-root-causes-20260913'))
+    import pairwise
+    target = {'unit_id': 'hidden-target', 'context': {'current_turn': {'input_query': 'q', 'output_answer': 'answer'}}, 'evidence': [], 'ratings': [{'scores': {'score': 0}}]}
+    reference = {**target, 'unit_id': 'hidden-reference', 'context': {'current_turn': {'input_query': 'rq', 'output_answer': 'reference'}}}
+    forward, pairs = pairwise.comparison_payload(target, [reference], ['score'], False)
+    backward, _ = pairwise.comparison_payload(target, [reference], ['score'], True)
+    assert forward['objects'] == backward['objects'][::-1]
+    assert forward['comparisons'][0]['left'] == backward['comparisons'][0]['left'] == 0
+    assert 'ratings' not in str(forward) and 'hidden-reference' not in str(forward)
+    assert pairs == [('comparison_0_score', 0, 'score')]
+    assert pairwise.grade_comparisons([0, 1, 2], [0, 1, 2], ['left_better', 'equal', 'left_worse']) == 1
+    assert pairwise.grade_comparisons([0, 1, 2], [0, 1, 2], ['left_worse', 'equal', 'left_better'], True) == 1
+    assert pairwise.grade_comparisons([0, 1, 2], [0], ['left_better']) is None
+    assert pairwise.grade_comparisons([0, 1, 2], [0], ['not_assessable']) is None
+
+
+def test_pairwise_references_exclude_target_group_test_and_blocked_train(monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]/'research/judge-root-causes-20260913'))
+    import pairwise
+    unit = {'unit_id': 'target', 'group_id': 'target-group', 'partition': 'dev',
+            'context': {'current_turn': {'input_query': 'q', 'output_answer': 'a'}}, 'evidence': [], 'ratings': [{'scores': {'score': 0}}]}
+    train = [{**unit, 'unit_id': str(i), 'group_id': str(i), 'partition': 'train'} for i in range(3)]
+    case = {'units': [unit, {**unit, 'partition': 'train'}, *train, {**train[0], 'unit_id': 'test', 'partition': 'test'}], 'scores': {'score': [0, 1]}}
+    assert [r['unit_id'] for r in pairwise.choose_references(case, unit, {'0'})] == ['1']

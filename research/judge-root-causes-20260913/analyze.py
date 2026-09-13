@@ -67,6 +67,7 @@ def main() -> None:
                    ('CI09774440', 'assessment_score', 'examples_scores_only', 'examples_human_reasons'),
                    ('CI09840650', 'assessment_score', 'examples_scores_only', 'examples_human_reasons'),
                    *[('CI10071259', c, 'examples_scores_only', arm) for arm in ['examples_human_reasons', 'examples_provider_compatible'] for c in ['completeness', 'factuality', 'structure']]]
+    comparisons += [('CI10071259', c, 'examples_provider_compatible', 'examples_provider_compatible_ultra') for c in ['completeness', 'factuality', 'structure']]
     result = []
     for agent, criterion, control, candidate in comparisons:
         case = source[agent]

@@ -1,5 +1,5 @@
 {
-  "status": "H7B_PREREGISTERED_NO_ACCEPTED_PRODUCTION_CANDIDATE",
+  "status": "H9_PREREGISTERED_NO_ACCEPTED_PRODUCTION_CANDIDATE",
   "cases": 8,
   "selected_units": 150,
   "arms": [
@@ -147,7 +147,7 @@
     "coverage_after": 0.9523809523809523
   },
   "h8": {
-    "status": "PREPARED_BEFORE_API",
+    "status": "COMPLETE_REJECTED",
     "agent": "CI10071259",
     "partition": "dev",
     "units": 63,
@@ -158,6 +158,25 @@
     "control": "examples_provider_compatible",
     "candidate": "examples_provider_compatible_ultra",
     "code_sha256": "52f7b7271efed0b7d6e7bcb2a76bdd017fd383c3a3011adfb5a93f5ec177e084",
-    "tests_passed": 148
+    "tests_passed": 148,
+    "metrics_sha256": "a04c4fd1cc188a9b79e1e822dd608d43bb6aee25815a3c49eed525c950ba4e2e"
+  },
+  "h9": {
+    "status": "PREPARED_BEFORE_API",
+    "cases": 8,
+    "units": 150,
+    "requests": 450,
+    "arms": [
+      "reference_pointwise",
+      "reference_pairwise",
+      "reference_pairwise_reverse"
+    ],
+    "code_sha256": "6579a6b60f9d49829ae800cb6f6c7f54e4c0b176adda1a75f104b847f9b9d3d3",
+    "selection_sha256": "126dec91477d5e139ca5fb1058ee17679394d3eadc5a5fed7b1a270c3878ad0b"
+  },
+  "production_diagnostics": {
+    "commit": "8aa2491",
+    "tests_passed": 150,
+    "effect": "logs_only_no_scoring_change"
   }
 }

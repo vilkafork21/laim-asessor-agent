@@ -139,7 +139,7 @@ def evaluate(selection: list[dict], source: dict[str, dict], records: dict, arms
                 row = dict(audit(human, prediction), agent=item['agent'], criterion=criterion, arm=arm)
                 known = [i for i, h in enumerate(human) if h is not None]
                 m = score_results(pd.DataFrame({'score': [human[i] for i in known], 'agent_score': [prediction[i] for i in known]}), 'score', defect_threshold=max(scale), higher_is_better=True, train_mode_score=mode)
-                row.update({k: m[k] for k in ['defect_recall', 'defect_false_positive_rate', 'defect_confusion', 'baseline_mode_accuracy']})
+                row.update({k: m[k] for k in ['defect_recall', 'defect_false_positive_rate', 'defect_confusion', 'baseline_mode_accuracy', 'baseline_mode_accuracy_all_units', 'baseline_mode_score', 'defect_coverage', 'nondefect_coverage']})
                 rows.append(row)
     return rows
 
