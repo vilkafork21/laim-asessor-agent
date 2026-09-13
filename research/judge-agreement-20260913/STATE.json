@@ -50,7 +50,7 @@
   "execution_states": {
     "anchor": "COMPLETED_REJECTED",
     "nearest": "COMPLETED_REJECTED",
-    "features": "PST_COMPLETED_REJECTED_ONLINE_RUNNING",
+    "features": "PST_COMPLETED_REJECTED_ONLINE_CHECKPOINT_678_OF_712_TRANSPORT_INTERRUPTION",
     "new_request_records_before_features": 831,
     "metrics_sha256": {
       "pst-anchor-metrics.json": "f86f295c600dd5098b3c31a371f0cd5479bc93ea3a978d583ed6d2b97f16c11e",
@@ -60,10 +60,12 @@
       "pst-nearest-overrides.json": "d810eaab2af282d2b65c7318f0ce7f8af6ecae881dbde91d54e117819c6bda85",
       "feature-function-CI10071259": "bd7a7bd5c8853104f9dec7b3ddbfb6ad9585aa4cb55dff19e7b5527552702c23",
       "embedding-pst/metrics.json": "f9852db86ad6c24c70d1a839c9a7c4b25158810c8ada6ebcb2369abce9d1df40",
-      "embedding-online/metrics.json": "1dcca569a9813af8b7e9ef69b9c5effa8328f8fd53360dcc0a6945e596a8a86e"
+      "embedding-online/metrics.json": "1dcca569a9813af8b7e9ef69b9c5effa8328f8fd53360dcc0a6945e596a8a86e",
+      "pst-feature-collapse.json": "dbcde8d56fd96692951418c89e17e90ab7c0716af96d34d0b0c4477765e3287e"
     },
     "temperature": "COMPLETED_0_OF_4_MALFORMED_JSON",
-    "embedding": "COMPLETED_DIAGNOSTIC_ONLY_NOT_PROMOTED"
+    "embedding": "COMPLETED_DIAGNOSTIC_ONLY_NOT_PROMOTED",
+    "ultra_defaults": "SMOKE_RUNNING"
   },
   "flat_feature_protocol": {
     "status": "PREPARED_BEFORE_API",
