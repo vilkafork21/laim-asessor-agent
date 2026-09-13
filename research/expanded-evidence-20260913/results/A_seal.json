@@ -1,0 +1,9 @@
+{
+  "arm": "A",
+  "n": 96,
+  "sealed_utc": "2026-09-13T13:01:36.487494+00:00",
+  "predictions_sha256": "25024c837c1abb5e6d16a9546b6ed868453f1830327b155fc5e82f34615260bf",
+  "input_sha256": "7f0503a421d97d1eb5a8e95a8a0f8f5178582353aa5a7d43a74b128ffebc25cd",
+  "gold_opened": false,
+  "evaluator": "current_chat_assistant_not_GigaChat"
+}
