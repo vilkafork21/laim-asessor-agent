@@ -193,3 +193,10 @@ def test_manifest_alias_requires_matching_record_hash_and_unit(monkeypatch, tmp_
     manifest.write_text(json.dumps({'record_manifest': [entry]}))
     with pytest.raises(ValueError, match='единиц'):
         analyze.load_records()
+
+
+def test_ultra_profile_keeps_provider_defaults_and_separate_budget(monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]/'research/judge-root-causes-20260913'))
+    import live
+    assert live.model_profile(False) == {'model': 'GigaChat-2-Max', 'temperature': .001, 'top_p': .001, 'max_tokens': 1200}
+    assert live.model_profile(True) == {'model': 'GigaChat-3-Ultra', 'max_tokens': 16384}

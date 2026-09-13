@@ -156,6 +156,8 @@
       "max_tokens": 16384
     },
     "control": "examples_provider_compatible",
-    "candidate": "examples_provider_compatible_ultra"
+    "candidate": "examples_provider_compatible_ultra",
+    "code_sha256": "52f7b7271efed0b7d6e7bcb2a76bdd017fd383c3a3011adfb5a93f5ec177e084",
+    "tests_passed": 148
   }
 }
