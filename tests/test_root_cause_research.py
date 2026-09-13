@@ -160,3 +160,11 @@ def test_expert_reason_examples_are_train_only_and_bound_to_answer(monkeypatch):
     rows[2]['output_answer'] = 'чужая версия'
     with pytest.raises(ValueError, match='другой версии'):
         live.annotated_training(case, rows)
+
+
+def test_provider_refusal_is_distinct_from_unknown_score(monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]/'research/judge-root-causes-20260913'))
+    import live
+    assert live.provider_blacklist({'responses': [{'generations': [[{'response_metadata': {'finish_reason': 'blacklist'}}]]}]})
+    assert not live.provider_blacklist({'responses': [], 'error': 'ConnectError'})
+    assert not live.provider_blacklist({'responses': [{'generations': [[{'response_metadata': {'finish_reason': 'function_call'}}]]}], 'scores': {'score': None}})

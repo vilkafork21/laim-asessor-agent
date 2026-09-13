@@ -84,6 +84,11 @@ def rubric_examples(rubric: str) -> list[dict]:
     return result
 
 
+def provider_blacklist(record: dict) -> bool:
+    return any(g.get('response_metadata', {}).get('finish_reason') == 'blacklist'
+               for response in record['responses'] for generation in response['generations'] for g in generation)
+
+
 def candidate_prompt() -> str:
     if SYSTEM_PROMPT.count(OLD_BOUNDARY) != 1:
         raise ValueError('Исходная граница решения изменилась; нужен новый контроль')
@@ -139,7 +144,7 @@ def evaluate(selection: list[dict], source: dict[str, dict], records: dict, arms
     return rows
 
 
-async def run(observations: bool = False, blind_route: bool = False, route_examples: bool = False, rubric_retrieval: bool = False, human_reasons: bool = False) -> None:
+async def run(observations: bool = False, blind_route: bool = False, route_examples: bool = False, rubric_retrieval: bool = False, human_reasons: bool = False, provider_screen: bool = False) -> None:
     route_examples = route_examples or rubric_retrieval
     blind_route = blind_route or route_examples
     selection = json.loads((OUT/'selection.json').read_text())
@@ -161,10 +166,17 @@ async def run(observations: bool = False, blind_route: bool = False, route_examp
         for item in selection:
             item['units'] = sorted(u['unit_id'] for u in source[item['agent']]['units'] if u['partition'] == 'dev')
         arms = ['examples_scores_only', 'examples_human_reasons']
+    if provider_screen:
+        selection = [item for item in selection if item['agent'] == 'CI10071259']
+        selection[0]['units'] = json.loads((OUT/'provider-screen-selection.json').read_text())
+        train_ids = {u['unit_id'] for u in source['CI10071259']['units'] if u['partition'] == 'train'}
+        if not set(selection[0]['units']) <= train_ids:
+            raise ValueError('Совместимость примеров проверяется только на train')
+        arms = ['provider_screen']
     config = dotenv_values(OLD/'.gigachat.env')
     tls = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     tls.check_hostname, tls.verify_mode = False, ssl.CERT_NONE
-    if not blind_route and not human_reasons:
+    if not blind_route and not human_reasons and not provider_screen:
         tls.maximum_version = ssl.TLSVersion.TLSv1_2
     recorder = Recorder()
     llm = GigaChat(model='GigaChat-2-Max', base_url='https://api.giga.chat/v1', credentials=config['CREDENTIALS'], scope=config['SCOPE'], ssl_context=tls, timeout=150, max_retries=0, temperature=.001, top_p=.001, max_tokens=1200, callbacks=[recorder])
@@ -237,7 +249,7 @@ async def run(observations: bool = False, blind_route: bool = False, route_examp
                     request['messages'] = [m.model_dump(mode='json') for m in messages]
                     request['schema'] = RouteDecision.model_json_schema()
                     request['transport_profile'] = 'default_tls'
-                if human_reasons:
+                if human_reasons or provider_screen:
                     request['transport_profile'] = 'default_tls'
                     request['invocation_profile'] = 'production_process_with_rate_limit'
                 identity = hashlib.sha256(canonical([request, uid]).encode()).hexdigest()
@@ -268,6 +280,11 @@ async def run(observations: bool = False, blind_route: bool = False, route_examp
                 print(case['agent'], number, '/', len(item['units']), arm, record['status'], flush=True)
                 if any(e['status_code'] in [400, 401, 402, 403, 422] for e in record['call_errors']):
                     raise RuntimeError('Остановка: запрос, авторизация или квота')
+    if provider_screen:
+        result = {'scope': 'Отдельная проверка 15 подозреваемых train-входов без RAG. Human labels не входят в сообщения; blacklist отделён от сетевой ошибки и not_assessable.',
+                  'screening': [{'unit_id': uid, 'status': r['status'], 'provider_blacklist': provider_blacklist(r)} for (agent, uid, arm), r in records.items()]}
+        (OUT/'provider-screen-results.json').write_text(canonical(result))
+        return
     result = {'scope': 'Диагностический срез с усилением дефектов, не production prevalence. Роли, данные, шкала, модель одинаковы; меняется только правило достаточности решения. RAG отключён в обоих плечах.', 'rows': evaluate(selection, source, records, arms)}
     if observations:
         result['scope'] = 'Полный dev CI09840670; меняются только восстановленные observed_scenario/subscenario, gold и рубрика неизменны. Общее baseline переиспользуется по точному hash запроса.'
@@ -291,5 +308,6 @@ if __name__ == '__main__':
     group.add_argument('--route-examples', action='store_true')
     group.add_argument('--rubric-examples', action='store_true')
     group.add_argument('--human-reasons', action='store_true')
+    group.add_argument('--provider-screen', action='store_true')
     args = parser.parse_args()
-    asyncio.run(run(args.observations, args.blind_route, args.route_examples, args.rubric_examples, args.human_reasons))
+    asyncio.run(run(args.observations, args.blind_route, args.route_examples, args.rubric_examples, args.human_reasons, args.provider_screen))
