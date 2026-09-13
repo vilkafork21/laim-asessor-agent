@@ -87,9 +87,9 @@
     "metrics_sha256": "541972e4cd8599345e1dd3311256a2837d57a275c9ee0280ba99d9c012632f7f"
   },
   "analysis": {
-    "code_sha256": "2d4d458ea9a6b145867acfb65c74dafb3614b5e1b549f3a5d86e7d75f85df2ab",
+    "code_sha256": "539592e98254471990ac8e65451cdecb8d4271b7d6e3f27988b493f8c5963e64",
     "adjudication_packets_sha256": "7e3c311ae56e189c9fb691dad7c6b53835939b53886f1b5a4ff1e7c9766e15ed",
-    "tests_passed": 144
+    "tests_passed": 147
   },
   "h6": {
     "status": "COMPLETE_REJECTED",
@@ -131,7 +131,7 @@
     "results_sha256": "6332741a3aef20b463a996899b104f27b7e9c9f600a7609cfce51b4f2e4be488"
   },
   "h7b": {
-    "status": "PREPARED_BEFORE_API",
+    "status": "COMPLETE_COVERAGE_GAIN_QUALITY_NOT_ACCEPTED",
     "agent": "CI10071259",
     "partition": "dev",
     "units": 63,
@@ -141,6 +141,21 @@
       "examples_scores_only",
       "examples_provider_compatible"
     ],
-    "code_sha256": "b01c23f161240e328963eb4d22d872902eb1f3059eb270b5e055bfde4406e569"
+    "code_sha256": "b01c23f161240e328963eb4d22d872902eb1f3059eb270b5e055bfde4406e569",
+    "metrics_sha256": "7cb73ce1c91764f44e622c223456973e25eafbbcfdf7032b4eb2c453f86a258b",
+    "coverage_before": 0.7936507936507936,
+    "coverage_after": 0.9523809523809523
+  },
+  "h8": {
+    "status": "PREPARED_BEFORE_API",
+    "agent": "CI10071259",
+    "partition": "dev",
+    "units": 63,
+    "model": "GigaChat-3-Ultra",
+    "parameters": {
+      "max_tokens": 16384
+    },
+    "control": "examples_provider_compatible",
+    "candidate": "examples_provider_compatible_ultra"
   }
 }

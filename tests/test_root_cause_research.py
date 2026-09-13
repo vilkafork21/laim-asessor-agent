@@ -168,3 +168,28 @@ def test_provider_refusal_is_distinct_from_unknown_score(monkeypatch):
     assert live.provider_blacklist({'responses': [{'generations': [[{'response_metadata': {'finish_reason': 'blacklist'}}]]}]})
     assert not live.provider_blacklist({'responses': [], 'error': 'ConnectError'})
     assert not live.provider_blacklist({'responses': [{'generations': [[{'response_metadata': {'finish_reason': 'function_call'}}]]}], 'scores': {'score': None}})
+
+
+def test_manifest_alias_requires_matching_record_hash_and_unit(monkeypatch, tmp_path):
+    import hashlib
+    import json
+    import pytest
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]/'research/judge-root-causes-20260913'))
+    import analyze
+    monkeypatch.setattr(analyze, 'OUT', tmp_path)
+    (tmp_path/'runs').mkdir()
+    record = {'agent': 'a', 'unit_id': 'u', 'arm': 'control', 'request': {}, 'scores': {'score': 1}}
+    raw = json.dumps(record).encode()
+    (tmp_path/'runs'/'r.json').write_bytes(raw)
+    entry = {'agent': 'a', 'unit_id': 'u', 'arm': 'candidate', 'run_file': 'r.json', 'record_sha256': 'wrong'}
+    manifest = tmp_path/'provider-compatible-metrics.json'
+    manifest.write_text(json.dumps({'record_manifest': [entry]}))
+    with pytest.raises(ValueError, match='hash'):
+        analyze.load_records()
+    entry['record_sha256'] = hashlib.sha256(raw).hexdigest()
+    manifest.write_text(json.dumps({'record_manifest': [entry]}))
+    assert analyze.load_records()['a', 'u', 'candidate']['scores'] == {'score': 1}
+    entry['unit_id'] = 'another'
+    manifest.write_text(json.dumps({'record_manifest': [entry]}))
+    with pytest.raises(ValueError, match='единиц'):
+        analyze.load_records()

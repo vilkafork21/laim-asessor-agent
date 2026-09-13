@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import warnings
 from collections import Counter, defaultdict
 
@@ -12,7 +13,7 @@ from sklearn.metrics import cohen_kappa_score
 from audit import OUT, cases, consensus
 
 
-def main() -> None:
+def load_records() -> dict:
     records = {}
     for path in sorted((OUT/'runs').glob('*.json')):
         record = json.loads(path.read_text())
@@ -22,6 +23,24 @@ def main() -> None:
         if key in records:
             raise ValueError('Неоднозначная версия запроса; нельзя выбирать удачный ответ')
         records[key] = record
+    manifest = OUT/'provider-compatible-metrics.json'
+    if manifest.exists():
+        for entry in json.loads(manifest.read_text())['record_manifest']:
+            raw = (OUT/'runs'/entry['run_file']).read_bytes()
+            if hashlib.sha256(raw).hexdigest() != entry['record_sha256']:
+                raise ValueError('Manifest: hash ответа не совпадает')
+            record = json.loads(raw)
+            if (record['agent'], record['unit_id']) != (entry['agent'], entry['unit_id']):
+                raise ValueError('Manifest: подмена единицы оценки')
+            key = entry['agent'], entry['unit_id'], entry['arm']
+            if key in records and records[key] != record:
+                raise ValueError('Manifest: неоднозначная версия ответа')
+            records[key] = record
+    return records
+
+
+def main() -> None:
+    records = load_records()
     source = {c['agent']: c for _, c in cases()}
     panel_rows = []
     for agent, case in source.items():
@@ -47,7 +66,7 @@ def main() -> None:
                    ('CI09997438', 'assessment_score', 'baseline', 'blind_route_rubric_retry'),
                    ('CI09774440', 'assessment_score', 'examples_scores_only', 'examples_human_reasons'),
                    ('CI09840650', 'assessment_score', 'examples_scores_only', 'examples_human_reasons'),
-                   *[('CI10071259', c, 'examples_scores_only', 'examples_human_reasons') for c in ['completeness', 'factuality', 'structure']]]
+                   *[('CI10071259', c, 'examples_scores_only', arm) for arm in ['examples_human_reasons', 'examples_provider_compatible'] for c in ['completeness', 'factuality', 'structure']]]
     result = []
     for agent, criterion, control, candidate in comparisons:
         case = source[agent]
