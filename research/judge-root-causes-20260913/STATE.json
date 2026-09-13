@@ -1,5 +1,5 @@
 {
-  "status": "H1_H2_COMPLETE_REJECTED_H3_RUNNING",
+  "status": "H1_H2_H3_REJECTED_H4_PREREGISTERED",
   "cases": 8,
   "selected_units": 150,
   "arms": [
@@ -37,7 +37,7 @@
     "metrics_sha256": "8b3059a35d7c9415a695ead6c2aa3a8dde7592cb1a2d054fbe199b07bb426e77"
   },
   "h3": {
-    "status": "PREPARED_BEFORE_API",
+    "status": "COMPLETE_REJECTED",
     "agent": "CI09997438",
     "partition": "dev",
     "units": 71,
@@ -49,11 +49,26 @@
     "initial_local_schema_errors": 71,
     "fixed_code_sha256": "e3a6a01c0f746917c6762a49916489d10f22857e348d80b27022ce79c81ed2af",
     "transport_profile": "default_tls",
-    "transport_repair_code_sha256": "5d52bdb7dbadbe6f76dd70ad0e4681ad51c915df5edb2decdb8379f9b0030799"
+    "transport_repair_code_sha256": "5d52bdb7dbadbe6f76dd70ad0e4681ad51c915df5edb2decdb8379f9b0030799",
+    "metrics_sha256": "229c2fc3e0a06667b5add050ba511159487d322268c52b481cdfe857ad9b3052"
   },
   "annotation_audit": {
     "code_sha256": "2abac00c55f39d1153751aebacd15863e7ec4b8170ad3f44b6ab390d35ef53ef",
     "result_sha256": "eff83fc5c64be81e6d7a41142942fdf8e558f552970e52541cd886eeb80f1639",
     "tests_passed": 141
-  }
+  },
+  "h4": {
+    "status": "PREPARED_BEFORE_API",
+    "agent": "CI09997438",
+    "partition": "dev",
+    "units": 71,
+    "train_examples": 204,
+    "neighbors": 6,
+    "arms": [
+      "blind_route",
+      "blind_route_examples"
+    ],
+    "code_sha256": "6b93cc1f33940ef6ea2a0553d3e5f57eb7de0f2c6e0dfaa33579b5a396ec4231"
+  },
+  "human_panel_audit_sha256": "314a7ce9658c6eaec63abafc5b8938e1619c48c7ecc21cea499306f3e5008ee9"
 }

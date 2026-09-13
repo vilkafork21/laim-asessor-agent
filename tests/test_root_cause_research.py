@@ -95,3 +95,19 @@ def test_annotation_audit_binds_comments_to_actual_answer(monkeypatch, tmp_path)
     result = json.loads((tmp_path/'rubric-annotation-audit.json').read_text())['CI10071259']
     assert result['structure_annotation_audit']['dev:0']['unanimous'] == 1
     assert result['only_empty_tool_results'][1]['units'] == 1
+
+
+def test_route_training_uses_only_train_and_valid_source_category(monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]/'research/judge-root-causes-20260913'))
+    import live
+    import pytest
+    unit = {'unit_id': 'x', 'partition': 'train', 'source_rows': [2],
+            'context': {'current_turn': {'input_query': 'q', 'output_answer': 'a'}, 'history': [], 'observed_prediction': 'liabilities'}}
+    source = [None, [None, None, 'liabilities', 0, 'report', None, None, 'q']]
+    examples = live.route_training({'units': [unit, {**unit, 'partition': 'test', 'unit_id': 'test'}]}, source)
+    assert examples == [{'unit_id': 'x', 'input_query': 'q', 'history': [], 'route': 'report'}]
+    source[1][4] = 0
+    assert live.route_training({'units': [unit]}, source) == []
+    source[1][7] = 'чужой вопрос'
+    with pytest.raises(ValueError, match='не совпадает'):
+        live.route_training({'units': [unit]}, source)
