@@ -70,3 +70,5 @@ def test_blind_route_hides_target_decision_and_preserves_prior_context(monkeypat
     unit['ratings'][0]['scores']['assessment_score'] = 1
     assert live.blind_route_context(unit) == before
     assert before == {'input_query': 'вопрос', 'history': [{'input_query': 'раньше', 'output_answer': 'контекст'}]}
+    from langchain_gigachat import GigaChat
+    GigaChat(access_token='offline-test').with_structured_output(live.RouteDecision, method='function_calling')

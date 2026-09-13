@@ -43,6 +43,7 @@ NEW_BOUNDARY = '''Отдельно установи применимость к�
 
 
 class RouteDecision(BaseModel):
+    """Категория текущего запроса по инструкции классификатора."""
     reason: str
     route: Literal['issuance', 'available_credits', 'forced_cp_scenario', 'forced_credits_scenario', 'decline', 'liabilities', 'applications', 'refinance', 'education_credits', 'pledge', 'report', 'arrest', 'credit_card_faq', 'unknown', 'not_assessable']
 
@@ -109,6 +110,7 @@ async def run(observations: bool = False, blind_route: bool = False) -> None:
     tls.maximum_version = ssl.TLSVersion.TLSv1_2
     recorder = Recorder()
     llm = GigaChat(model='GigaChat-2-Max', base_url='https://api.giga.chat/v1', credentials=config['CREDENTIALS'], scope=config['SCOPE'], ssl_context=tls, timeout=150, max_retries=0, temperature=.001, top_p=.001, max_tokens=1200, callbacks=[recorder])
+    route_chain = llm.with_structured_output(RouteDecision, method='function_calling') if blind_route else None
     records = {}
     for item in selection:
         if hashlib.sha256(Path(item['case_path']).read_bytes()).hexdigest() != item['case_sha256']:
@@ -139,7 +141,7 @@ async def run(observations: bool = False, blind_route: bool = False) -> None:
                     record = {'agent': case['agent'], 'unit_id': uid, 'arm': arm, 'request': request, 'case_sha256': item['case_sha256']}
                     try:
                         if arm == 'blind_route':
-                            decision = await llm.with_structured_output(RouteDecision, method='function_calling').ainvoke(messages)
+                            decision = await route_chain.ainvoke(messages)
                             grade = None if decision.route == 'not_assessable' else int(decision.route == units[uid]['context']['observed_prediction'])
                             record.update(status='ok', scores={'assessment_score': grade}, route_decision=decision.model_dump(mode='json'))
                         else:

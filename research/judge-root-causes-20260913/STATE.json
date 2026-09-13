@@ -44,6 +44,8 @@
       "baseline",
       "blind_route"
     ],
-    "code_sha256": "d188e078372b8f6c2c0b6bce3c38d50983ce52680e002211c9142ddf46a99d79"
+    "code_sha256": "d188e078372b8f6c2c0b6bce3c38d50983ce52680e002211c9142ddf46a99d79",
+    "initial_local_schema_errors": 71,
+    "fixed_code_sha256": "e3a6a01c0f746917c6762a49916489d10f22857e348d80b27022ce79c81ed2af"
   }
 }
