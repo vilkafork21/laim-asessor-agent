@@ -97,6 +97,23 @@ def context_for(unit: dict) -> dict:
     return result
 
 
+def annotated_training(case: dict, annotations: dict) -> list[dict]:
+    examples = []
+    for unit in sorted(case['units'], key=lambda u: u['unit_id']):
+        if unit['partition'] != 'train':
+            continue
+        scores = {c: consensus(unit, c) for c in case['scores']}
+        if any(v is None for v in scores.values()):
+            continue
+        rows = [annotations[i] for i in unit['source_rows']]
+        current = unit['context']['current_turn']
+        if any(r[k] != current[k] for r in rows for k in ['input_query', 'output_answer']):
+            raise ValueError('Экспертное объяснение относится к другой версии ответа')
+        comments = list(dict.fromkeys(r['comment'] for r in rows if isinstance(r['comment'], str) and r['comment'].strip() not in ['', '-', '.', 'nan']))
+        examples.append({'unit_id': unit['unit_id'], 'question': _serialize_llm_record({'assessment_context': context_for(unit)}), 'scores': scores, 'comments': comments})
+    return examples
+
+
 def training_frame(case: dict) -> pd.DataFrame:
     rows = [{**{c: consensus(u, c) for c in case['scores']}, 'assessment_context': context_for(u)} for u in case['units'] if u['partition'] == 'train']
     return pd.DataFrame(rows, dtype=object)
@@ -122,7 +139,7 @@ def evaluate(selection: list[dict], source: dict[str, dict], records: dict, arms
     return rows
 
 
-async def run(observations: bool = False, blind_route: bool = False, route_examples: bool = False, rubric_retrieval: bool = False) -> None:
+async def run(observations: bool = False, blind_route: bool = False, route_examples: bool = False, rubric_retrieval: bool = False, human_reasons: bool = False) -> None:
     route_examples = route_examples or rubric_retrieval
     blind_route = blind_route or route_examples
     selection = json.loads((OUT/'selection.json').read_text())
@@ -139,10 +156,15 @@ async def run(observations: bool = False, blind_route: bool = False, route_examp
         arms = ['blind_route', 'blind_route_examples'] if route_examples else ['baseline', 'blind_route']
     if rubric_retrieval:
         arms = ['blind_route_train_retry', 'blind_route_rubric_retry']
+    if human_reasons:
+        selection = [item for item in selection if item['agent'] in ['CI09774440', 'CI10071259']]
+        for item in selection:
+            item['units'] = sorted(u['unit_id'] for u in source[item['agent']]['units'] if u['partition'] == 'dev')
+        arms = ['examples_scores_only', 'examples_human_reasons']
     config = dotenv_values(OLD/'.gigachat.env')
     tls = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     tls.check_hostname, tls.verify_mode = False, ssl.CERT_NONE
-    if not blind_route:
+    if not blind_route and not human_reasons:
         tls.maximum_version = ssl.TLSVersion.TLSv1_2
     recorder = Recorder()
     llm = GigaChat(model='GigaChat-2-Max', base_url='https://api.giga.chat/v1', credentials=config['CREDENTIALS'], scope=config['SCOPE'], ssl_context=tls, timeout=150, max_retries=0, temperature=.001, top_p=.001, max_tokens=1200, callbacks=[recorder])
@@ -165,6 +187,21 @@ async def run(observations: bool = False, blind_route: bool = False, route_examp
             book.close()
             (OUT/'route-training.json').write_text(canonical(examples))
             index = EnhancedBM25([re.findall(r'\w+', canonical({k: e[k] for k in ['input_query', 'history']}).lower()) for e in examples])
+        if human_reasons:
+            extension = '.parquet' if case['agent'] == 'CI10071259' else '.xlsx'
+            path = next(Path(p) for p in case['source_hashes'] if p.endswith(extension))
+            if hashlib.sha256(path.read_bytes()).hexdigest() != case['source_hashes'][str(path)]:
+                raise ValueError('Источник экспертных объяснений изменился')
+            if extension == '.parquet':
+                frame = pd.read_parquet(path).reset_index(drop=True)
+                annotations = {i: {'input_query': r['question'], 'output_answer': r['answer'], 'comment': r['Комментарий']} for i, r in frame.iterrows()}
+            else:
+                book = load_workbook(path, read_only=True, data_only=True)
+                annotations = {i: {'input_query': r[2], 'output_answer': r[4], 'comment': r[7]} for i, r in enumerate(book.active.values, 1)}
+                book.close()
+            examples = annotated_training(case, annotations)
+            index = EnhancedBM25([re.findall(r'\w+', e['question'].lower()) for e in examples])
+            (OUT/f"{case['agent']}-reason-training.json").write_text(canonical(examples))
         with patch('agent.asessor_agent.QuestionAnswerRetriever', lambda **_: SimpleNamespace(hybrid_search=lambda **_: [])):
             judge = Asessor(llm=llm, embedding_model=None, dataset=training_frame(case), instruction=case['rubric']+'\n'+case['target'], context_columns=['assessment_context'], answer_columns=list(case['scores']), score_values=next(iter(case['scores'].values())), instruction_summarization=False, instruction_structuring=False)
         judge.examples_retriever = SimpleNamespace(hybrid_search=lambda **_: [])
@@ -172,6 +209,12 @@ async def run(observations: bool = False, blind_route: bool = False, route_examp
         for number, uid in enumerate(item['units'], 1):
             for arm in (arms if number % 2 else arms[::-1]):
                 prompt = candidate_prompt() if arm == 'decision_sufficiency' else SYSTEM_PROMPT
+                if human_reasons:
+                    prompt += '\nЭкспертные пояснения к train-примерам объясняют их оценки, а не факты текущего клиента. Не переноси из них персональные факты в текущий объект. Исходная рубрика имеет приоритет.'
+                    ranks = index.get_scores(re.findall(r'\w+', _serialize_llm_record({'assessment_context': context_for(units[uid])}).lower()))
+                    chosen = sorted(range(len(examples)), key=lambda i: (-ranks[i], examples[i]['unit_id']))[:3]
+                    selected = [{'question': examples[i]['question'], 'answer': _serialize_llm_record({**examples[i]['scores'], **({'expert_comments': examples[i]['comments']} if arm == 'examples_human_reasons' else {})})} for i in chosen]
+                    judge.examples_retriever = SimpleNamespace(hybrid_search=lambda **_: selected)
                 judge.printing_chain = judge.retrieval_chain | ChatPromptTemplate.from_messages([('system', prompt), ('human', ASSESSMENT_INPUT_PROMPT)])
                 judge.agent_chain = judge.printing_chain | llm.with_structured_output(judge._output_model, method='function_calling')
                 payload = {'assessment_context': context_for(restored[uid] if arm == 'restored_observations' else units[uid])}
@@ -193,6 +236,9 @@ async def run(observations: bool = False, blind_route: bool = False, route_examp
                     request['messages'] = [m.model_dump(mode='json') for m in messages]
                     request['schema'] = RouteDecision.model_json_schema()
                     request['transport_profile'] = 'default_tls'
+                if human_reasons:
+                    request['transport_profile'] = 'default_tls'
+                    request['invocation_profile'] = 'production_process_with_rate_limit'
                 identity = hashlib.sha256(canonical([request, uid]).encode()).hexdigest()
                 path = OUT/'runs'/f'{identity}.json'
                 if path.exists():
@@ -230,7 +276,9 @@ async def run(observations: bool = False, blind_route: bool = False, route_examp
         result['scope'] = 'Полный dev CI09997438; слепой классификатор без примеров против шести ближайших BM25 train-примеров с исходным GT. Текущие gold/answer/route не передаются модели.'
     if rubric_retrieval:
         result['scope'] = 'Полный dev CI09997438; одинаковые train-примеры и production-повторы, candidate дополнен шестью исходными фрагментами рубрики с родительской категорией по BM25 текущего запроса. Gold неизменен.'
-    (OUT/('rubric-examples-metrics.json' if rubric_retrieval else 'route-examples-metrics.json' if route_examples else 'blind-route-metrics.json' if blind_route else 'observations-metrics.json' if observations else 'metrics.json')).write_text(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False)+'\n')
+    if human_reasons:
+        result['scope'] = 'Полный dev ПОСТ и CI09774440; три одинаковых ближайших train-примера с неизменными scores, candidate дополнен исходными экспертными объяснениями только этих train-примеров. Текущие комментарии скрыты.'
+    (OUT/('human-reasons-metrics.json' if human_reasons else 'rubric-examples-metrics.json' if rubric_retrieval else 'route-examples-metrics.json' if route_examples else 'blind-route-metrics.json' if blind_route else 'observations-metrics.json' if observations else 'metrics.json')).write_text(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False)+'\n')
 
 
 if __name__ == '__main__':
@@ -241,5 +289,6 @@ if __name__ == '__main__':
     group.add_argument('--blind-route', action='store_true')
     group.add_argument('--route-examples', action='store_true')
     group.add_argument('--rubric-examples', action='store_true')
+    group.add_argument('--human-reasons', action='store_true')
     args = parser.parse_args()
-    asyncio.run(run(args.observations, args.blind_route, args.route_examples, args.rubric_examples))
+    asyncio.run(run(args.observations, args.blind_route, args.route_examples, args.rubric_examples, args.human_reasons))

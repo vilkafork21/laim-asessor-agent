@@ -143,3 +143,20 @@ def test_paired_analysis_counts_abstention_as_lost_yield(monkeypatch, tmp_path):
     assert result['correct_control'] == 3 and result['correct_candidate'] == 2
     assert result['regressed'] == 1 and result['corrected'] == 0
     assert result['delta_correct_label_yield']['ci95'][1] <= 0
+
+
+def test_expert_reason_examples_are_train_only_and_bound_to_answer(monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]/'research/judge-root-causes-20260913'))
+    import live
+    import pytest
+    unit = {'unit_id': 'train', 'partition': 'train', 'source_rows': [2],
+            'context': {'current_turn': {'input_query': 'q', 'output_answer': 'a'}},
+            'evidence': [], 'ratings': [{'scores': {'structure': 0}}]}
+    case = {'units': [unit, {**unit, 'unit_id': 'dev', 'partition': 'dev', 'source_rows': [9]}], 'scores': {'structure': [0, 1, 2]}}
+    rows = {2: {'input_query': 'q', 'output_answer': 'a', 'comment': 'объяснение только train'}}
+    examples = live.annotated_training(case, rows)
+    assert len(examples) == 1 and examples[0]['unit_id'] == 'train'
+    assert examples[0]['comments'] == ['объяснение только train']
+    rows[2]['output_answer'] = 'чужая версия'
+    with pytest.raises(ValueError, match='другой версии'):
+        live.annotated_training(case, rows)

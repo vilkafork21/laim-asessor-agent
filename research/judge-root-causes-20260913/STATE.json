@@ -1,5 +1,5 @@
 {
-  "status": "H1_H2_H3_H4_NO_ACCEPTED_GAIN_H5_PREREGISTERED",
+  "status": "H1_TO_H5_NO_ACCEPTED_GAIN_H6_PREREGISTERED",
   "cases": 8,
   "selected_units": 150,
   "arms": [
@@ -73,7 +73,7 @@
   },
   "human_panel_audit_sha256": "314a7ce9658c6eaec63abafc5b8938e1619c48c7ecc21cea499306f3e5008ee9",
   "h5": {
-    "status": "RUNNING",
+    "status": "COMPLETE_REJECTED",
     "agent": "CI09997438",
     "partition": "dev",
     "units": 71,
@@ -83,11 +83,31 @@
       "blind_route_rubric_retry"
     ],
     "code_sha256": "f4aaa21d7053b310266315cfc78c5cbddf79cbbcda75558c315843150ecd2e7e",
-    "invocation_profile": "production_process_with_rate_limit"
+    "invocation_profile": "production_process_with_rate_limit",
+    "metrics_sha256": "541972e4cd8599345e1dd3311256a2837d57a275c9ee0280ba99d9c012632f7f"
   },
   "analysis": {
     "code_sha256": "2d4d458ea9a6b145867acfb65c74dafb3614b5e1b549f3a5d86e7d75f85df2ab",
     "adjudication_packets_sha256": "7e3c311ae56e189c9fb691dad7c6b53835939b53886f1b5a4ff1e7c9766e15ed",
     "tests_passed": 144
+  },
+  "h6": {
+    "status": "PREPARED_BEFORE_API",
+    "agents": [
+      "CI09774440",
+      "CI10071259"
+    ],
+    "partition": "dev",
+    "units": 103,
+    "neighbors": 3,
+    "arms": [
+      "examples_scores_only",
+      "examples_human_reasons"
+    ],
+    "code_sha256": "3be4c7e2921539994492a8b3d2fd6b52afcb3496b8d41f3aa12072ec9900683c"
+  },
+  "prior_completed_series_counts": {
+    "received_responses": 728,
+    "raw_records_including_local_failures": 805
   }
 }
