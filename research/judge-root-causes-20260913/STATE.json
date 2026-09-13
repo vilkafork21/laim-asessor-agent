@@ -178,5 +178,14 @@
     "commit": "8aa2491",
     "tests_passed": 150,
     "effect": "logs_only_no_scoring_change"
+  },
+  "business_metric_audit": {
+    "status": "COMPLETE_BUSINESS_KM_UPWARD_BIAS_CONFIRMED",
+    "code_sha256": "d407a6c07482f9b44debaf76c96a2fa417db42fc910c22a71ae8a1c89588ae50",
+    "results_sha256": "eff9866b79e64602d04d3b4baa29b1e1d7e4be1103d2bd1781b7b16a19f74c0b",
+    "units": 63,
+    "groups": 7,
+    "common_scored_units_all_arms": 50,
+    "tests_passed": 153
   }
 }

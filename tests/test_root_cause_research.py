@@ -227,3 +227,14 @@ def test_pairwise_references_exclude_target_group_test_and_blocked_train(monkeyp
     train = [{**unit, 'unit_id': str(i), 'group_id': str(i), 'partition': 'train'} for i in range(3)]
     case = {'units': [unit, {**unit, 'partition': 'train'}, *train, {**train[0], 'unit_id': 'test', 'partition': 'test'}], 'scores': {'score': [0, 1]}}
     assert [r['unit_id'] for r in pairwise.choose_references(case, unit, {'0'})] == ['1']
+
+
+def test_business_metric_aggregates_before_harmonic_and_bounds_missing(monkeypatch):
+    import numpy as np
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]/'research/judge-root-causes-20260913'))
+    import business_metric as business
+    values = np.array([[1., 0., .5], [0., 1., 1.]])
+    assert business.aggregate(values)['business_f1'] == .5
+    assert np.mean([business.harmonic(*row[:2]) for row in values]) == 0
+    bounds = business.bounded_aggregate(np.array([[1., 1., 1.], [np.nan, np.nan, np.nan]]))
+    assert bounds['lower']['business_f1'] == .5 and bounds['upper']['business_f1'] == 1
