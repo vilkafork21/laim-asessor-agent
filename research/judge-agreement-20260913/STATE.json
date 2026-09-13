@@ -58,10 +58,12 @@
       "pst-nearest-metrics.json": "d7b0f14fdcaff11a3d4880e155ac81603fa0121c5faf27e8d14ecf2b7a3d780f",
       "online-nearest-metrics.json": "90eabc02bad1331863ae03f3a3fab9dcd31499ad96600efee04a36cb9ae8faaf",
       "pst-nearest-overrides.json": "d810eaab2af282d2b65c7318f0ce7f8af6ecae881dbde91d54e117819c6bda85",
-      "feature-function-CI10071259": "bd7a7bd5c8853104f9dec7b3ddbfb6ad9585aa4cb55dff19e7b5527552702c23"
+      "feature-function-CI10071259": "bd7a7bd5c8853104f9dec7b3ddbfb6ad9585aa4cb55dff19e7b5527552702c23",
+      "embedding-pst/metrics.json": "f9852db86ad6c24c70d1a839c9a7c4b25158810c8ada6ebcb2369abce9d1df40",
+      "embedding-online/metrics.json": "1dcca569a9813af8b7e9ef69b9c5effa8328f8fd53360dcc0a6945e596a8a86e"
     },
     "temperature": "COMPLETED_0_OF_4_MALFORMED_JSON",
-    "embedding": "PREPARED"
+    "embedding": "COMPLETED_DIAGNOSTIC_ONLY_NOT_PROMOTED"
   },
   "flat_feature_protocol": {
     "status": "PREPARED_BEFORE_API",
@@ -115,5 +117,18 @@
     ],
     "model": "Giga-Embeddings-instruct-480M-0826 local",
     "scope": "Диагностика, не эквивалент production GigaChat API"
+  },
+  "ultra_default_protocol": {
+    "status": "PREPARED_BEFORE_API",
+    "source_sha256": {
+      "feature_calibration.py": "77d8e3dbca57fd2079ad5cf9bd8b4f5b4f5a894ed913b2727f665e1060ae0d01"
+    },
+    "model": "GigaChat-3-Ultra",
+    "temperature": "omitted",
+    "top_p": "omitted",
+    "max_tokens": 16384,
+    "output_method": "function_calling",
+    "schema_style": "flat",
+    "scope": "Dev-only raw, no calibrator; first 2 PST then full 63 if workable"
   }
 }

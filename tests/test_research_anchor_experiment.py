@@ -130,3 +130,21 @@ def test_embedding_pool_preserves_chunk_weights(monkeypatch):
     import numpy as np
     np.testing.assert_allclose(baseline.pool([[1, 0], [0, 1]], [1, 3]), np.array([1, 3]) / np.sqrt(10))
     assert baseline.normalized_answer({'context': {'current_turn': {'output_answer': '  Ответ\nДА '}}}) == 'ответ да'
+
+
+def test_server_defaults_and_raw_dev_do_not_fit_a_calibrator(monkeypatch, tmp_path):
+    monkeypatch.syspath_prepend(str(path.parent))
+    import feature_calibration as features
+    import json
+    from langchain_gigachat import GigaChat
+    assert features.generation_parameters(False, True) == {}
+    llm = GigaChat(credentials='unused', **features.generation_parameters(False, True))
+    assert llm.temperature is None and llm.top_p is None
+    dev = [{'unit_id': 'dev', 'ratings': [{'scores': {'structure': 0}}]}]
+    records = {'dev': {'status': 'ok', 'result': {**{key: 4 for key in features.FEATURES}, 'assessment_score': 2}}}
+    output = tmp_path/'raw.json'
+    features.evaluate([], dev, records, output)
+    result = json.loads(output.read_text())
+    assert result['fits'] == {}
+    assert list(result['predictions']) == ['raw_gigachat']
+    assert result['training_units'] == 0

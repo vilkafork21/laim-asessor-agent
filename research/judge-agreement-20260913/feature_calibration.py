@@ -51,7 +51,9 @@ def feature_values(result: dict) -> list[int]:
     return [result[key] if result[key] is not None else -1 for key in FEATURES]
 
 
-def generation_parameters(temperature_only: bool) -> dict[str, float]:
+def generation_parameters(temperature_only: bool, server_defaults: bool = False) -> dict[str, float]:
+    if server_defaults:
+        return {}
     return {'temperature': .001} if temperature_only else {'temperature': .001, 'top_p': .001}
 
 
@@ -80,13 +82,13 @@ def evaluate(train: list[dict], dev: list[dict], records: dict[str, dict], outpu
     valid_dev = [u for u in dev if u['unit_id'] in eligible]
     x = [feature_values(records[u['unit_id']]['result']) for u in valid_train]
     y = [consensus(u, 'structure') for u in valid_train]
-    if len(set(y)) < 2 or not valid_dev:
+    if train and (len(set(y)) < 2 or not valid_dev):
         raise ValueError('Недостаточно валидных данных или классов для калибровки')
     human = [consensus(u, 'structure') for u in dev]
     raw = [records[u['unit_id']].get('result', {}).get('assessment_score') for u in dev]
     predictions = {'raw_gigachat': [v if isinstance(v, (int, float)) else None for v in raw]}
     fits = {}
-    for name, weight in [('unweighted', None), ('balanced', 'balanced')]:
+    for name, weight in ([('unweighted', None), ('balanced', 'balanced')] if train else []):
         model = LogisticRegression(C=1.0, class_weight=weight, max_iter=1000, random_state=20260913).fit(x, y)
         values = model.predict([feature_values(records[u['unit_id']]['result']) for u in valid_dev])
         by_id = dict(zip([u['unit_id'] for u in valid_dev], values.tolist()))
@@ -102,7 +104,7 @@ def evaluate(train: list[dict], dev: list[dict], records: dict[str, dict], outpu
         print(name, {k: row[k] for k in ['cohen_kappa', 'krippendorff_alpha_ordinal', 'spearman_correlation', 'defect_recall', 'defect_false_positive_rate']}, flush=True)
     output.write_text(json.dumps({'rows': rows, 'fits': fits, 'training_units': len(train), 'valid_training_units': len(valid_train),
         'unit_ids': [u['unit_id'] for u in dev], 'human': human, 'predictions': predictions,
-        'scope': 'Dev; клиенты dev полностью исключены из train калибратора. Два фиксированных C=1 профиля без поиска гиперпараметров.'}, ensure_ascii=False, indent=2, allow_nan=False)+'\n')
+        'scope': 'Dev; клиенты dev полностью исключены из train калибратора. Два фиксированных C=1 профиля без поиска гиперпараметров.' if train else 'Только raw GigaChat на dev; калибратор не обучается.'}, ensure_ascii=False, indent=2, allow_nan=False)+'\n')
 
 
 async def run(args: argparse.Namespace) -> None:
@@ -117,9 +119,9 @@ async def run(args: argparse.Namespace) -> None:
     tls.check_hostname, tls.verify_mode = False, ssl.CERT_NONE
     tls.maximum_version = ssl.TLSVersion.TLSv1_2
     recorder = Recorder()
-    generation = generation_parameters(args.temperature_only)
-    llm = GigaChat(model='GigaChat-2-Max', base_url='https://api.giga.chat/v1', credentials=settings['CREDENTIALS'], scope=settings['SCOPE'],
-                   ssl_context=tls, **generation, max_tokens=1000, timeout=150, max_retries=0, callbacks=[recorder])
+    generation = generation_parameters(args.temperature_only, args.server_defaults)
+    llm = GigaChat(model=args.model, base_url='https://api.giga.chat/v1', credentials=settings['CREDENTIALS'], scope=settings['SCOPE'],
+                   ssl_context=tls, **generation, max_tokens=args.max_tokens, timeout=150, max_retries=0, callbacks=[recorder])
     dataset = pd.DataFrame([{'assessment_context': context(u), 'assessment_score': consensus(u, 'structure')} for u in train])
     with patch('agent.asessor_agent.QuestionAnswerRetriever', lambda **_: SimpleNamespace(hybrid_search=lambda **_: [])):
         judge = Asessor(llm=llm, embedding_model=None, dataset=dataset, instruction=case['rubric'], context_columns=['assessment_context'],
@@ -131,11 +133,12 @@ async def run(args: argparse.Namespace) -> None:
     judge.agent_chain = judge.printing_chain | llm.with_structured_output(judge._output_model, method=args.output_method,
         **({'strict': True} if args.output_method == 'json_schema' else {}))
     records = {}
-    units = (train+dev)[:args.limit] if args.limit else train+dev
+    units = dev if args.dev_only else train+dev
+    units = units[:args.limit] if args.limit else units
     for number, unit in enumerate(units, 1):
         payload = {'assessment_context': context(unit)}
         request = {'messages': [m.model_dump(mode='json') for m in judge.printing_chain.invoke(_serialize_llm_record(payload)).to_messages()],
-                   'schema': judge._output_model.model_json_schema(), 'model': llm.model, **generation, 'max_tokens': 1000}
+                   'schema': judge._output_model.model_json_schema(), 'model': llm.model, **generation, 'max_tokens': args.max_tokens}
         if args.output_method != 'json_schema':
             request['output_method'] = args.output_method
         identity = hashlib.sha256(canonical([request, unit['unit_id']]).encode()).hexdigest()
@@ -156,11 +159,11 @@ async def run(args: argparse.Namespace) -> None:
             record.update(responses=recorder.responses, call_errors=recorder.errors)
             path.write_text(canonical(record))
         records[unit['unit_id']] = record
-        print(case['agent'], unit['partition'], record['status'], number, '/', len(train+dev), flush=True)
+        print(case['agent'], unit['partition'], record['status'], number, '/', len(units), flush=True)
         if any(e['status_code'] in [400, 401, 402, 403, 422] for e in record['call_errors']):
             raise RuntimeError('Прогон остановлен: контракт запроса, авторизация или квота')
     if not args.limit:
-        evaluate(train, dev, records, args.output / f"{case['agent']}-metrics.json")
+        evaluate([] if args.dev_only else train, dev, records, args.output / f"{case['agent']}-metrics.json")
 
 
 if __name__ == '__main__':
@@ -170,7 +173,12 @@ if __name__ == '__main__':
     parser.add_argument('--limit', type=int, default=0)
     parser.add_argument('--schema-style', choices=['nullable', 'flat'], default='nullable')
     parser.add_argument('--output-method', choices=['json_schema', 'function_calling'], default='json_schema')
-    parser.add_argument('--temperature-only', action='store_true')
+    sampling = parser.add_mutually_exclusive_group()
+    sampling.add_argument('--temperature-only', action='store_true')
+    sampling.add_argument('--server-defaults', action='store_true')
+    parser.add_argument('--model', choices=['GigaChat-2-Max', 'GigaChat-3-Ultra'], default='GigaChat-2-Max')
+    parser.add_argument('--max-tokens', type=int, default=1000)
+    parser.add_argument('--dev-only', action='store_true')
     arguments = parser.parse_args()
     if arguments.output.resolve().is_relative_to(ROOT):
         raise ValueError('Запросы, ответы и калибратор сохраняются вне Git')
