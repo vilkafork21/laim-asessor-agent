@@ -1,6 +1,8 @@
 """Восстановление наблюдений по строгой связи с исходным вопросом и ответом."""
 from __future__ import annotations
 
+import argparse
+import ast
 import hashlib
 import json
 from collections import defaultdict
@@ -48,6 +50,65 @@ def bound_tools(messages: list[dict], answer: str) -> list[dict]:
                        'arguments': call['args'], 'content': message['content'], 'message_position': position,
                        'binding': 'same_exit_payload_before_final_answer'})
     return result
+
+
+def bind_nbsp_tools(messages: list[dict], question: str, answer: str) -> list[dict]:
+    humans = [m for m in messages if m.get('type') == 'human']
+    assistants = [m for m in messages if m.get('type') == 'ai']
+    if not humans or humans[0]['content'].strip() != question.strip() or not assistants:
+        raise ValueError('Не подтверждена исходная версия вопроса')
+    final = assistants[-1]['content']
+    if final.strip().replace('\u00a0', ' ') != answer.strip().replace('\u00a0', ' '):
+        raise ValueError('Ответы отличаются не только NBSP')
+    return [{**e, 'binding': 'same_response_nbsp_equivalent_before_final_answer'} for e in bound_tools(messages, final)]
+
+
+def restore_post_nbsp() -> None:
+    case = next(c for _, c in cases() if c['agent'] == 'CI10071259')
+    source = next(Path(p) for p in case['source_hashes'] if p.endswith('.parquet'))
+    if hashlib.sha256(source.read_bytes()).hexdigest() != case['source_hashes'][str(source)]:
+        raise ValueError('Исходная корзина изменилась')
+    frame = pd.read_parquet(source).reset_index(drop=True)
+    assignments = defaultdict(set)
+    for unit in case['units']:
+        if unit['partition'].startswith('excluded'):
+            continue
+        for row in unit['source_rows']:
+            assignments[frame.at[row, 'case_id']].add((unit['group_id'], unit['partition']))
+    columns = {'factuality': 'Фактологическая точность ответа', 'completeness': 'Полнота предоставленной информации', 'structure': 'Структурированный формат ответа'}
+    variants = []
+    keys = ['case_id', 'doc_request_id', 'question_id', 'question', 'answer']
+    for key, rows in frame.groupby(keys, sort=False, dropna=False):
+        responses = rows.response.dropna().unique()
+        if not len(responses):
+            continue
+        if len(responses) != 1:
+            raise ValueError('Несколько response для одной версии ответа')
+        messages = ast.literal_eval(responses[0])['messages']
+        humans = [m for m in messages if m.get('type') == 'human']
+        assistants = [m for m in messages if m.get('type') == 'ai']
+        if not humans or not assistants or humans[0]['content'].strip() != str(key[3]).strip():
+            continue
+        final, answer = assistants[-1]['content'].strip(), str(key[4]).strip()
+        if final == answer or final.replace('\u00a0', ' ') != answer.replace('\u00a0', ' '):
+            continue
+        related = frame[(frame[keys[:3]] == list(key[:3])).all(axis=1)]
+        if len(related.response.dropna().unique()) != 1 or len(assignments[key[0]]) != 1:
+            raise ValueError('Неоднозначный payload или разбиение исходной группы')
+        group, partition = next(iter(assignments[key[0]]))
+        ratings = [{'rater_id': hashlib.sha256(json.dumps(r['ID Эксперта'], ensure_ascii=False).encode()).hexdigest(),
+                    'scores': {c: float(r[name]) for c, name in columns.items()}} for _, r in rows.iterrows() if r[list(columns.values())].notna().all()]
+        variants.append({'source_rows': list(map(int, rows.index)), 'group_id': group, 'partition': partition,
+                         'context': {'mode': 'qa', 'current_turn': {'input_query': key[3], 'output_answer': key[4]}},
+                         'evidence': bind_nbsp_tools(messages, key[3], key[4]), 'ratings': ratings,
+                         'benchmark_status': 'display_variant_not_independent_new_unit',
+                         'response_sha256': hashlib.sha256(responses[0].encode()).hexdigest()})
+    (OUT/'post-nbsp-variants.json').write_text(json.dumps(variants, ensure_ascii=False, indent=2, allow_nan=False)+'\n')
+    summary = {'variants': len(variants), 'tool_results': sum(len(v['evidence']) for v in variants),
+               'partitions': {p: sum(v['partition'] == p for v in variants) for p in ['train', 'dev', 'test']},
+               'source_sha256': case['source_hashes'][str(source)], 'gold_policy': 'unchanged_not_merged', 'new_independent_groups': 0}
+    (OUT/'post-nbsp-summary.json').write_text(json.dumps(summary, ensure_ascii=False, indent=2)+'\n')
+    print(summary)
 
 
 def main() -> None:
@@ -100,4 +161,7 @@ def main() -> None:
 
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--post-nbsp', action='store_true')
+    args = parser.parse_args()
+    restore_post_nbsp() if args.post_nbsp else main()

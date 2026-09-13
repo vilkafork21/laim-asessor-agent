@@ -238,3 +238,20 @@ def test_business_metric_aggregates_before_harmonic_and_bounds_missing(monkeypat
     assert np.mean([business.harmonic(*row[:2]) for row in values]) == 0
     bounds = business.bounded_aggregate(np.array([[1., 1., 1.], [np.nan, np.nan, np.nan]]))
     assert bounds['lower']['business_f1'] == .5 and bounds['upper']['business_f1'] == 1
+
+
+def test_nbsp_evidence_binding_keeps_answer_and_rejects_format_changes(monkeypatch):
+    import pytest
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]/'research/judge-root-causes-20260913'))
+    import restore_observations as restoration
+    messages = [{'type': 'human', 'content': 'q'},
+                {'type': 'ai', 'content': '', 'tool_calls': [{'id': 'call', 'name': 'search', 'args': {}}]},
+                {'type': 'tool', 'tool_call_id': 'call', 'status': 'success', 'content': '[]'},
+                {'type': 'ai', 'content': 'два\u00a0слова\nстрока'}]
+    answer = 'два слова\nстрока'
+    evidence = restoration.bind_nbsp_tools(messages, 'q', answer)
+    assert answer == 'два слова\nстрока' and messages[-1]['content'] == 'два\u00a0слова\nстрока'
+    assert len(evidence) == 1 and evidence[0]['binding'] == 'same_response_nbsp_equivalent_before_final_answer'
+    for question, wrong_answer in [('чужой', answer), ('q', 'два слова строка'), ('q', 'два  слова\nстрока')]:
+        with pytest.raises(ValueError):
+            restoration.bind_nbsp_tools(messages, question, wrong_answer)

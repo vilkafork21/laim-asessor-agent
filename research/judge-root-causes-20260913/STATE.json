@@ -162,7 +162,7 @@
     "metrics_sha256": "a04c4fd1cc188a9b79e1e822dd608d43bb6aee25815a3c49eed525c950ba4e2e"
   },
   "h9": {
-    "status": "PREPARED_BEFORE_API",
+    "status": "RUNNING",
     "cases": 8,
     "units": 150,
     "requests": 450,
@@ -187,5 +187,20 @@
     "groups": 7,
     "common_scored_units_all_arms": 50,
     "tests_passed": 153
+  },
+  "nbsp_restoration": {
+    "status": "COMPLETE_VARIANTS_NOT_MERGED_WITH_BENCHMARK",
+    "variants": 36,
+    "tool_results": 116,
+    "new_independent_groups": 0,
+    "partitions": {
+      "train": 15,
+      "dev": 4,
+      "test": 17
+    },
+    "code_sha256": "79b8e2ef683bc87709a2558ffa35e4299cfb1b5a69503add54a0c795c5bb75be",
+    "summary_sha256": "432d99632a6c983db24b5e0e61d8f9b74bc94e478a78bc9420b70ec7c79871c8",
+    "variants_sha256": "0318e198fcc644f1ba6dbb26e03b0f1b282b063d31be47a621333e6475ed411e",
+    "tests_passed": 154
   }
 }
