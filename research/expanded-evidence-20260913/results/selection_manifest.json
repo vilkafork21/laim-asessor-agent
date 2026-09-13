@@ -1,0 +1,28 @@
+{
+  "created_utc": "2026-09-13T12:57:12.584312+00:00",
+  "n": 96,
+  "target_n": 96,
+  "selection_counts": {
+    "source_unit_keys": 1013,
+    "no_trace": 519,
+    "rater_text_identity_conflicts": 102,
+    "exact_qa_fingerprints": 905,
+    "no_valid_evidence": 513,
+    "ambiguous_consensus_or_duplicate_conflict": 12,
+    "evidence_over_budget": 5
+  },
+  "all_valid_evidence_units": 380,
+  "eligible_after_budgets": 375,
+  "eligible_clusters": 16,
+  "selected_clusters": 16,
+  "raw_source_sha256": "aa8fe4103734c33c7efa43e401e39f0a7e32fc6e28fd74168f04c060d662c548",
+  "blind_inputs_sha256": "7f0503a421d97d1eb5a8e95a8a0f8f5178582353aa5a7d43a74b128ffebc25cd",
+  "gold_sha256": "61c46214fda31cce88790402479770bacf3894337b72e4f1af7498b18d9f0a8c",
+  "input_characters": 545607,
+  "max_input_characters": 11351,
+  "evaluator": "current_chat_assistant",
+  "new_provider_generations": 0,
+  "fresh_test": false,
+  "prior_pilots_excluded": false,
+  "gold_values_shown_to_evaluator": false
+}
